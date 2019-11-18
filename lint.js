@@ -78,9 +78,12 @@
 
 为了解决这个问题，Vue 提供了一个 $listeners 属性，它是一个对象，里面包含了作用在这个组件上的所有监听器。例如： */
 
-var argRE = /:(.*)$/
-let a = 'v-model:dddd.feg'.match(argRE)[1]
-a ='model:dddd.feg'.slice(0, -(a.length + 1))
-console.log(a)
+// var argRE = /:(.*)$/
+// let a = 'v-model:dddd.feg'.match(argRE)[1]
+// a ='model:dddd.feg'.slice(0, -(a.length + 1))
+// console.log(a)
  
 // 我们知道了模板上的事件标记在构建AST树上是怎么处理，还有如何根据构建的AST树返回正确的渲染函数，但是真正事件绑定离不开绑定注册事件。这个阶段发生在组件挂载的阶段。有了渲染函数就可以生成实例挂载需要的Vnode树，并且会进行patchVnode的环节进行真实节点的构建。有了Vnode，接下来会遍历子节点递归调用createElm为每个子节点创建真实的DOM，由于Vnode中有data属性，在创建真实DOM时会进行注册相关钩子的过程，其中一个就是注册事件相关处理。
+
+
+// 如果ref属性在指令v-for内，就需要创建一个组件实例或DOM节点的引用数组，而非单一引用，这需要refInFor来区分

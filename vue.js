@@ -2957,10 +2957,10 @@
     }
     // 如果options.abstract为真，说明当前实例是抽象的，不会执行if语句，直接设置vm.$parent和vm.$root。说明抽象实例不会被添加到父实例的$children中。如果abstract为假，说明当前实例不是抽象的，是一个普通的组件实例，因为抽象组件不能作为父级，开启while循环，目的是逐层向上寻找，找到第一个不抽象的实例作为父级，并将当前实例添加到父实例的$children属性中
     vm.$parent = parent;// 设置当前实例的$parent属性，指向父级
-    vm.$root = parent ? parent.$root : vm; //如果没有父组件，它自己就是根组件，如果有父组件，vm.$root就取父组件的$root。
+    vm.$root = parent ? parent.$root : vm; //如果没有父组件，根组件就是自己，如果有父组件，vm.$root就取父组件的$root。
     // 总结：将当前vm添加到父实例的$children属性里，并设置当前vm的$parent指向父实例
     vm.$children = [];
-    vm.$refs = {};
+    vm.$refs = {} //一个实例的$refs对象，存放组件中所有使用了ref属性的{ref值:组件实例/DOM节点}
     vm._watcher = null; // 记录vm实例的渲染函数的watcher
     vm._inactive = null;
     vm._directInactive = false;
@@ -3762,9 +3762,8 @@
       var vm = this;
       vm._uid = uid$3++
       vm._isVue = true; // 标识一个对象是Vue实例，避免被观测(不会执行new Observer)
-      // 如果当前Vue实例是组件，则执行initInternalComponent方法。
-      if (options && options._isComponent) {
-        initInternalComponent(vm, options);// 主要为vm.$options添加一些属性
+      if (options && options._isComponent) { // 如果当前Vue实例是组件
+        initInternalComponent(vm, options) // 主要为vm.$options添加一些属性
       } else { // 当前Vue实例不是组件，调用mergeOptions方法
         vm.$options = mergeOptions(
           resolveConstructorOptions(vm.constructor),//解析constructor上的options属性
@@ -3782,7 +3781,7 @@
       initState(vm);
       initProvide(vm); // 在data/props后初始化 provide
       callHook(vm, 'created');
-      if (vm.$options.el) {//在new Vue时传了el节点，则调用$mount开启模版编译阶段和挂载阶段
+      if (vm.$options.el) { //在new Vue时传了el节点，则调用$mount开启模版编译阶段和挂载阶段
         vm.$mount(vm.$options.el);
       }// 如果没有传，则需要用户手动调用vm.$mount，否则不进入下一个生命周期流程
     };
@@ -4373,13 +4372,13 @@
 
 
   var ref = {
-    create(_, vnode) {
-      registerRef(vnode);
+    create(_, vnode) { 
+      registerRef(vnode) // 给vm.$refs对象添加ref键值对
     },
     update(oldVnode, vnode) {
-      if (oldVnode.data.ref !== vnode.data.ref) {
-        registerRef(oldVnode, true);
-        registerRef(vnode);
+      if (oldVnode.data.ref !== vnode.data.ref) { // 如果新旧vnode的ref值不一样
+        registerRef(oldVnode, true); //将vm.$refs对象中对应的ref数据先删除
+        registerRef(vnode); // 在添加新的ref数据
       }
     },
     destroy(vnode) {
@@ -4388,27 +4387,26 @@
   };
 
   function registerRef (vnode, isRemoval) {
-    var key = vnode.data.ref;
-    if (!isDef(key)) return
-
-    var vm = vnode.context;
-    var ref = vnode.componentInstance || vnode.elm;
-    var refs = vm.$refs;
-    if (isRemoval) {
-      if (Array.isArray(refs[key])) {
-        remove(refs[key], ref);
-      } else if (refs[key] === ref) {
+    var key = vnode.data.ref; // 获取元素上的ref值
+    if (!isDef(key)) return // 如果没有 直接返回
+    var vm = vnode.context; // 获取vnode对象的编译作用域
+    var refInstance = vnode.componentInstance || vnode.elm //获取vnode节点对应的组件实例，如果不存在则获取vnode节点对应的真实DOM节点，所以ref其实就是组件实例或DOM节点
+    var refs = vm.$refs; //获取vm实例的$refs，是一个对象
+    if (isRemoval) { // 如果isRemoval传了真，即从refs对象中删除该vnode对应的ref数据
+      if (Array.isArray(refs[key])) { // refs[key]是数组，将refInstance从数组中移除
+        remove(refs[key], refInstance);
+      } else if (refs[key] === refInstance) { // 不是数组，则将值设为undefined
         refs[key] = undefined;
       }
     } else {
-      if (vnode.data.refInFor) {
-        if (!Array.isArray(refs[key])) {
-          refs[key] = [ref];
-        } else if (refs[key].indexOf(ref) < 0) {
-          refs[key].push(ref);
+      if (vnode.data.refInFor) { //refInFor值是真，即ref是在v-for中使用的，需要创建一个组件实例或DOM节点的引用数组，而非单一引用；引用信息是包含DOM节点或组件实例的数组
+        if (!Array.isArray(refs[key])) { //如果在refs对象中，ref对应的值不是数组
+          refs[key] = [refInstance] // 强制转换成数组，key为ref属性值，value为 [组件实例或DOM节点]
+        } else if (refs[key].indexOf(refInstance) < 0) { // 是数组，且如果在refs对象中，ref值属性不存在
+          refs[key].push(refInstance) // 在refs对象中，将组件实例或DOM节点push进ref值对应的数组
         }
-      } else {
-        refs[key] = ref;
+      } else { // ref属性不是在v-for中使用
+        refs[key] = refInstance; // 以键值对 ref值: 组件实例/DOM节点 的形式存入对象refs
       }
     }
   }
@@ -5563,22 +5561,20 @@
   }
 
   function getRawBindingAttr(el, name) {
-    return el.rawAttrsMap[':' + name] ||
-      el.rawAttrsMap['v-bind:' + name] ||
-      el.rawAttrsMap[name]
+    return el.rawAttrsMap[`:${name}`] || el.rawAttrsMap[`v-bind:${name}`] || el.rawAttrsMap[name]
   }
 
-  // 用来获取v-bind/:属性的值。
+  // 用来获取v-bind/:属性或普通属性的值的值。
   function getBindingAttr(el, name, getStatic) {
-    var dynamicValue = getAndRemoveAttr(el, ':' + name) || getAndRemoveAttr(el, 'v-bind:' + name);
+    var dynamicValue = getAndRemoveAttr(el, `:${name}`) || getAndRemoveAttr(el, `v-bind:${name}`)
     // 首先通过getAndRemoveAttr获取名为':'+name的属性值，如果获取不到，则会获取v-bind+name属性的值
-    if (dynamicValue != null) { // 假设成功得到了获取绑定的属性值，调用了parseFilters函数并将返回值返回。
-      return parseFilters(dynamicValue) // 解析过滤器的，编写绑定的属性时可以用filter
-    } else if (getStatic !== false) {//获取绑定的值失败 且参数getStatic和false不全等
-      // 当我们为元素或组件添加属性时，这个属性可以是绑定的也可以是非绑定的，继续尝试获取非绑定的属性值
-      var staticValue = getAndRemoveAttr(el, name);
-      if (staticValue != null)
-        return JSON.stringify(staticValue)//如果属性值存在则返回JSON.stringify后的属性值。JSON.stringify能够保证对于非绑定属性，属性值总是字符串而不是变量或表达式。编译器生成的渲染函数是代码字符串，要new Function才能变成函数
+    if (dynamicValue != null) { //如果成功获取到绑定的属性值，调用parseFilters函数并将返回值返回
+      return parseFilters(dynamicValue) // 解析过滤器的，因为编写绑定的属性时可能用了filter
+    } else if (getStatic !== false) {// 没有获取到绑定的属性值，且参数getStatic没有传false
+      // 获取没有用:/v-bind的非绑定的属性值
+      var staticValue = getAndRemoveAttr(el, name) // 获取静态的属性值，赋给staticValue
+      if (staticValue != null) return JSON.stringify(staticValue)
+      //如果静态属性值存在，则返回JSON.stringify后的值。JSON.stringify能保证对于非绑定属性，属性值总是字符串而不是变量或表达式。编译器生成的渲染函数是代码字符串，要new Function才能变成函数
     }
   }
 
@@ -8004,55 +8000,50 @@
   }
 
   function processRef (el) {
-    var ref = getBindingAttr(el, 'ref'); // 解析并获取元素 ref 属性的值
-    if (!ref) return
+    var ref = getBindingAttr(el, 'ref'); // 获取元素ref属性的值
+    if (!ref) return // 获取不到则直接返回
     el.ref = ref; //为元素的描述对象添加ref属性，属性值为解析后生成的表达式字符串
-    el.refInFor = checkInFor(el); //添加refInFor属性,标识着当前元素的ref属性是否在v-for指令之内
-  }//如果ref属性在指令v-for内，就需要创建一个组件实例或DOM节点的引用数组，而非单一引用，这需要refInFor来区分
+    el.refInFor = checkInFor(el); //添加refInFor属性，真假代表着当前元素的ref属性是否在v-for之内
+  }// 父元素使用了v-for也算处于v-for之内
 
   function processFor (el) {
-    var exp;
-    if ((exp = getAndRemoveAttr(el, 'v-for'))) { //获取v-for属性的属性值 属性值存在才会执行if语句块
-      var res = parseFor(exp); //解析v-for属性的值
-      if (res) { // 解析成功，使用extend函数将res中的属性混入当前元素的描述对象中
-        extend(el, res);
-      } else {
-        warn$2(("Invalid v-for expression: " + exp), el.rawAttrsMap['v-for']);
+    var exp
+    if (exp = getAndRemoveAttr(el, 'v-for')) { //获取v-for的属性值，存在才会执行if语句块
+      var res = parseFor(exp) // 调用parseFor函数解析v-for属性的值，结果对象赋给res
+      if (res) { // res对象存在，将res对象中的属性并入当前元素的描述对象中
+        extend(el, res)
+      } else { // res对象存在，即解析v-for属性值失败，报警提示
+        warn$2(`Invalid v-for expression: ${exp}`, el.rawAttrsMap['v-for']);
       }
     }
   }
   // 作用是解析v-for的值，返回一个包含解析结果的对象。
-
-  function parseFor (exp) { // 'obj in list'
-    var inMatch = exp.match(forAliasRE); // ['obj in list', 'obj','list']
+  function parseFor (exp) { // 下面用这个例子：'item in list'
+    var inMatch = exp.match(forAliasRE); // ['item in list', 'item','list']
     if (!inMatch) return //匹配失败则函数直接返回
     var res = {};
     res.for = inMatch[2].trim();// 在res对象上添加for属性,值为inMatch数组的第三个元素  'list'
-    var alias = inMatch[1].trim().replace(stripParensRE, ''); // 'obj'/ 'obj, index' /'obj, key, index'
+    var alias = inMatch[1].trim().replace(stripParensRE, ''); // 'item'/ 'item, index' /'item, key, index'
     var iteratorMatch = alias.match(forIteratorRE);// null [', index', 'index'] [', key, index', 'key'， 'index']
-    if (iteratorMatch) { //如果alias值为'obj, index'，则iteratorMatch会是有两个元素的数组
-      res.alias = alias.replace(forIteratorRE, '').trim(); //如果alias的值为'obj, index'，则替换后的结果res.alias为'obj'
-      res.iterator1 = iteratorMatch[1].trim(); //在res上定义iterator1属性，值是iteratorMatch数组第二个元素。假设alias为'obj, index'，则res.iterator1为'index'
-      // 由于alias值为'obj, index'，对应的iteratorMatch数组只有两个元素，所以iteratorMatch[2]为undefined，if不执行
-      if (iteratorMatch[2]) {//但如果alias为 'obj, key, index'，则iteratorMatch[2]会是'index'
+    if (iteratorMatch) { //如果alias值为'item, index'，则iteratorMatch会是有两个元素的数组
+      res.alias = alias.replace(forIteratorRE, '').trim(); //如果alias的值为'item, index'，则替换后的结果res.alias为'item'
+      res.iterator1 = iteratorMatch[1].trim(); //在res上定义iterator1属性，值是iteratorMatch数组第二个元素。假设alias为'item, index'，则res.iterator1为'index'
+      // 由于alias值为'item, index'，对应的iteratorMatch数组只有两个元素，所以iteratorMatch[2]为undefined，if不执行
+      if (iteratorMatch[2]) {//但如果alias为 'item, key, index'，则iteratorMatch[2]会是'index'
         res.iterator2 = iteratorMatch[2].trim();// 在res上定义了iterator2属性，值是iteratorMatch[2]。
       }
-    } else {//如果alias值为'obj'时，则iteratorMatch值会是null，在res添加alias属性，值是alias的值'obj'
+    } else {//如果alias值为'item'时，则iteratorMatch值会是null，在res添加alias属性，值是alias的值'item'
       res.alias = alias;
     }
-    return res // {for: 'list', alias: 'obj', iterator1: 'key', iterator2: 'index'}
+    return res // {for: 'list', alias: 'item', iterator1: 'key', iterator2: 'index'}
   }
-
 
   function processIf(el) {
     var exp = getAndRemoveAttr(el, 'v-if');//从el的attrsList属性中获取并移除v-if指令的值
     if (exp) { // 只要没有写v-if属性值，就当做没有使用v-if指令
       el.if = exp; //vif属性值存在，给el添加if属性，值为v-if的属性值
       // 如果一个元素使用了v-if，会把包含它自身的元素描述对象el添加到自身el的ifConditions属性中（是一个数组）
-      addIfCondition(el, {
-        exp,
-        block: el
-      });
+      addIfCondition(el, { exp, block: el })
     } else { //v-if属性值不存在，但如果用了v-else，则给el添加else属性，值为true
       if (getAndRemoveAttr(el, 'v-else') != null) {
         el.else = true;
@@ -8342,13 +8333,14 @@
     }
   }
   
-  function checkInFor (el) {// 如果一个标签用了ref，且该标签或父代标签用v-for，则认为ref是在v-for之内。所以就需要从当前元素的描述对象开始一直遍历到根节点元素的描述对象，一旦发现某个标签的元素描述对象有for属性，说明该标签使用v-for
-    var parent = el; //从当前元素的描述对象开始
-    while (parent) { // 逐层向父级节点遍历，直到根节点为止
-      if (parent.for !== undefined) return true //某标签的元素描述对象的for属性不为undefined
-      parent = parent.parent;
+  // 如果一个标签用了ref属性，且它或它的父代标签用了v-for，则认为ref在v-for之内。checkInFor函数返回真假值，代表该标签的ref属性是否处于v-for之中，赋给元素描述对象refInFor属性
+  function checkInFor (el) {
+    var parent = el; // 从当前元素的描述对象开始
+    while (parent) { // 直到遇到根节点为止
+      if (parent.for !== undefined) return true // for属性的值不为undefined，返回true
+      parent = parent.parent; // 向上遍历父级节点
     }
-    return false //当前元素所使用的ref属性不在v-for之内.会在当前元素描述对象上添加refInFor属性为false
+    return false //当前元素所使用的ref属性不在v-for之内，函数返回false
   }
 
   function parseModifiers (name) { // 解析修饰符 比如：v-on:select.prevent.stop

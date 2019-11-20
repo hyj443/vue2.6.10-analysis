@@ -1,4 +1,4 @@
-/*Vue.js v2.6.10 */
+/*Vue.js v2.6.10*/
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() : typeof define === 'function' && define.amd ? define(factory) : (global = global || self, global.Vue = factory());
 }(this, function () { 'use strict';
@@ -405,7 +405,7 @@
 
   // 页面初始化的所有状态都准备好后，下一步就是要生成组件相应的虚拟节点——VNode。第一次进行组件初始化时，VNode也会执行一次初始化并存储这时创建好的VNode对象。在随后的生命周期中，组件内的数据发生变动，会先生成新的VNode对象，再根据与之前存储的旧VNode的对比，来执行刷新页面DOM的操作。
   // 定义VNode类自身，再定义一些常用的节点创建方法，包括创建空的注释节点，文字虚拟节点和新的克隆节点。虚拟节点本身是一个包含了所有渲染所需信息的载体，不仅有相应的DOM标签和属性信息，还包含了子虚拟节点列表，所以一个组件初始化之后得到的VNode是一棵虚拟节点树，实质是抽象和信息化了的对应于DOM树的JS对象
-  class VNode { 
+  class VNode {
     constructor(tag, data, children, text, elm, context, componentOptions, asyncFactory) {
       this.tag = tag; // 当前节点的标签名
       this.data = data; // 当前节点对应的数据对象
@@ -1056,170 +1056,139 @@
     }
     return res
   }
-
+  // 调用机会基本上是两个initProps组件创建时初始化，另一个是updateChildComponent更新子组件时
   function validateProp(key, propOptions, propsData, vm) {
-    // key为propOptions的属性名，propOptions是用户配的props选项（规范化好了）。propsData是父组件提供的props数据
-    var prop = propOptions[key]; // key对应的prop选项
-    var absent = !hasOwn(propsData, key); // propsData没有key，说明父组件没有传这个prop的数据
-    var value = propsData[key]; // 父组件传key对应的prop数据，没传为undefined
-    // 对 prop 的类型为布尔值时的特殊处理
-    var booleanIndex = getTypeIndex(Boolean, prop.type);
-    // getTypeIndex的返回值大于-1，说明第一个参数这个类型在期望的类型之中
-    if (booleanIndex > -1) { // 说明在定义 props 时指定了 Boolean 类型
-      if (absent && !hasOwn(prop, 'default')) {
-        value = false // 父组件没有传该prop。且该prop也没有指定default。在这种情形下，指定该prop的类型为Boolean，会自动将该prop的值设为false。
+    // key为propOptions的prop名，propOptions是用户配的props选项。propsData是父组件透传的props数据
+    var prop = propOptions[key]; // key对应的规范化好的prop配置对象
+    var absent = !hasOwn(propsData, key); //缺席：父组件没有透传该prop的数据
+    var value = propsData[key]; // 父组件传的该prop的数据，没传为undefined
+    // 对prop的类型为Boolean时的特殊处理
+    var booleanIndex = getTypeIndex(Boolean, prop.type) //booleanIndex是Boolean在期望类型中的位置
+    if (booleanIndex > -1) { // 用户在定义该prop时指定的类型中有Boolean
+      if (absent && !hasOwn(prop, 'default')) { //父组件没有传该prop，用户定义该prop时也没指定默认值，既然指定了prop的类型为Boolean，则自动将该prop值设为false
+        value = false
       } else if (value === '' || value === hyphenate(key)) {
-        // 父组件传了，但传的是''或是一个驼峰转连字符后的名字与值为相同字符串的 prop
-        var stringIndex = getTypeIndex(String, prop.type);
-        // stringIndex是String类型在prop类型定义中的位置。
-        // stringIndex<0说明没有为该prop指定String类型，否则说明为prop指定了String类型，目前已经为prop 指定了Boolean类型，检测String和Boolean这两个类型谁定义在前面
-        if (stringIndex < 0 || booleanIndex < stringIndex) {
-          // 没有定义 String 类型 或 定义了 String 类型但String的优先级没有 Boolean 高
-          value = true; // 该 prop 的值设置为 true，而非字符串。
+        // 父组件传的是空字符串，或是一个与prop名驼峰转连字符后的字符串相同的字符串
+        var stringIndex = getTypeIndex(String, prop.type) //stringIndex是String类型在期望类型中的位置
+        if (stringIndex < 0 || booleanIndex < stringIndex) { //没有为该prop指定String类型，或指定了String类型但在Boolean的后面，说明优先级没有Boolean高
+          value = true; // 则将该prop的值设为true，而不是字符串
         }
       }
+    }   
+    if (value === undefined) {//如果该prop没有接收到外界的prop值，则获取默认值
+      value = getPropDefaultValue(vm, prop, key); //默认值赋给value
+      var prevShouldObserve = shouldObserve // 缓存当前shouldObserve的值
+      toggleObserving(true) // 开启观测开关
+      observe(value) // 对该prop的默认值进行观测，因为得到的默认值是非响应式的
+      toggleObserving(prevShouldObserve) // 还原shouldObserve的状态
     }
-    
-    // 检测该 prop 的值是否是 undefined
-    if (value === undefined) {
-      value = getPropDefaultValue(vm, prop, key); // 获取默认值
-      var prevShouldObserve = shouldObserve;
-      // 保存了之前的shouldObserve，开启开关，观测 value，还原shouldObserve状态。因为取到的默认值是非响应式的
-      toggleObserving(true);
-      observe(value);
-      toggleObserving(prevShouldObserve);
-    }
-    assertProp(prop, key, value, vm, absent);
-    // validateProp 一开始没有对props的类型做校验，首先如果一个 prop 的类型是布尔，则为它设置合理的布尔值，然后调用getPropDefaultValue获取默认值，assertProp才真正对props做类型校验。
-    return value
+    assertProp(prop, key, value, vm, absent) //这里才是validateProp函数的真正对prop做类型校验。
+    return value // validateProp最后返回prop的值，不管是透传而来的还是默认值
   }
 
-  // Get the default value of a prop.
+  // 在父组件没有透传prop值且又要获取prop值时，获取prop的默认值
   function getPropDefaultValue (vm, prop, key) {
-    if (!hasOwn(prop, 'default')) {
-      return undefined
+    if (!hasOwn(prop, 'default')) return undefined // 如果prop的选项对象没有配置default，说明没有设置默认值，直接返回undefined
+    var def = prop.default // 定义def常量保存默认值
+    if (isObject(def)) { //默认值不能直接传对象或数组，而要用一个函数去返回，和data一样，这是防止多个组件实例共享一份数据所带来的问题
+      warn('无效的prop的默认值"'+key +'":'+'如果prop默认值为对象或数组，你要用工厂函数返回它', vm)
     }
-    // 检测开发者在定义 prop 时是否指定了默认值，如果没有指定则返回 undefined。否则定义 def 常量，用来保存默认值。
-    var def = prop.default;
-    // 如果 prop 默认值是对象，则会警告：你需要用一个工厂函数返回对象类型的默认值，这样是防止多个组件实例共享一份数据所造成的问题
-    if (isObject(def)) {
-      warn('无效的prop的默认值"' + key + '":' + '如果prop默认值为对象或数组，你要用工厂函数返回它', vm);
-    }
-    // 执行getPropDefaultValue说明父组件没有传prop，vm.$options.propsData[key]是undefined，为什么还要加下面的判断？因为组件第一次创建与后续的更新走的是两套不太一致的逻辑。updateChildComponent函数负责组件的更新。当执行updateChildComponent更新组件时，在调用 validateProp(校验prop数据是否符合预期类型)之前 vm.$options.propsData还没有被更新
-    // 条件 vm.$options.propsData[key] === undefined 说明上一次组件更新或创建时，父组件没有向组件传递该 prop 数据，条件 vm._props[key] !== undefined 说明该 prop 存在定义了的默认值，又由于这段代码存在于 getPropDefaultValue 函数中，所以整个 if 条件：1、当前组件处于更新状态，且没有传递该 prop 数据给组件。2、上一次更新或创建时外界也没有向组件传递该 prop 数据。3、上一次组件更新或创建时该 prop 拥有一个不为 undefined 的默认值
-    if (vm && vm.$options.propsData &&
-      vm.$options.propsData[key] === undefined &&
-      vm._props[key] !== undefined
-    ) {
-      // 那么此时应该返回之前的 prop 值(即默认值)作为本次渲染该 prop 的默认值。这样就能避免触发没有意义的响应。为什么能避免触发无意义的响应呢？很简单，假设每次都重新获取默认值而不是返回之前的默认值，那么如下 prop 的默认值将总是会变化的：
-      /**props: {
-          prop1: {
-            default () {
-              return { a: 1 }
-            }
+    // 更新子组件调用updateChildComponent，它会更新prop数据:props[key]=validateProp(key,propOptions,propsData,vm)，更新vm._props对象中的每个prop值，然后才执行:vm.$options.propsData=propsData。即组件更新时，vm._props更新，并没有用到本次外界传入的数据，而是上一次组件更新或创建时的外界透传的数据。我们知道validateProp中，在没有接收到外界prop数据时，调用getPropDefaultValue获取默认值，所以getPropDefaultValue执行肯定是本次更新没有收到外界的prop数据，而vm.$options.propsData存的是上次组件创建或更新时接收的prop数据，如果它为undefined，说明上一次组件更新或创建时外界没有透传该prop数据。那上次组件更新或创建时，它肯定尝试获取默认值，至于能不能获取到就是另一回事。现在本次更新需要prop的默认值，有两个选择，1.获取上次更新或创建时的默认值，2.获取本次更新的prop的默认值。
+    // 获取本次的默认值怎么做：直接用def，返回def.call(vm)或def，但有一种情况：默认值是工厂函数返回的对象/数组，每次获取该默认值都得到不一样的对象，虽然数据看上去一样，但它们的引用不一样，对于组件更新来说，prop值更新了，会触发无意义的响应，因为视图没有变化。因此要返回上一次的默认值，而不是在本次重新求值。
+    /*props: {
+        prop1: {
+          default () {
+            return { a: 1 }
           }
-        } prop1 的默认值是由工厂函数返回的对象，即使看上去数据一样，但他们是不同的内存地址的引用，这样每次都会触发响应，但视图并不会变化，即触发了无意义的响应。所以，返回上一次的默认值就行。
-       */
+        }
+      }
+    问题来了，那上一次组件更新或创建时，要有默认值才行啊，上一次没有接收到外界的prop数据，如果vm._prop[key]有值，说明上一次props[key]=validateProp(key,propOptions,propsData,vm)，获取到了默认值赋给了vm._props
+    */
+    // 所以下面的if判断中vm.$options.propsData[key]===undefined说明上一次组件更新或创建时外界没有向组件传递该prop数据，vm._props[key]!==undefined说明该prop存在默认值的
+    if (vm && vm.$options.propsData && //说明组件已创建，也接收到了父组件传的prop数据对象
+      vm.$options.propsData[key] === undefined && //
+      vm._props[key] !== undefined //
+    ) { //当前组件处于更新状态，且没有传递该prop数据给组件，上一次更新或创建时外界也没有向组件传递该prop数据，上一次组件更新或创建时该prop就有一个不是undefined的默认值。那么此时一个返回之前的prop值，即默认值，作为本次更新的prop的默认值，为什么不重新获取默认值而是返回之前的默认值呢？
       return vm._props[key]
     }
-    return typeof def === 'function' && getType(prop.type) !== 'Function'
-      ? def.call(vm)
-      : def
-    // def 为该prop的默认值，但默认值可能是由函数执行产生的，所以如果是函数则执行def.call(vm)来获取默认值，否则直接使用def。getType(prop.type) !== 'Function'说明，如果我们指定该 prop 的默认值类型为函数，就不应该通过执行 def来获取默认值，应直接将 def 函数本身作为默认值
+    return typeof def === 'function' && getType(prop.type) !== 'Function' ? def.call(vm) : def
+    // 因为对象或数组默认值必须从一个工厂函数获取，所以如果传的是函数且指定的type不是函数类型，执行函数来获取真正的默认值，否则直接使用def作为默认值。如果我们指定该prop的类型为函数，就不应该通过执行def来获取默认值，应该直接将def本身作为默认值
   }
 
-  // Assert whether a prop is valid.
-  function assertProp (
-    prop, // 该prop的定义对象
-    name, // 该 prop 的名字
-    value, // 该 prop 的值
-    vm,
-    absent // 外界是否向组件传了该 prop 数据
-  ) {
-    if (prop.required && absent) {
-      // 该prop必传，但外界没有传，警告提示没传prop，立即返回
+  // 校验一个prop是否是有效的
+  function assertProp(prop, name, value, vm, absent) {
+    // prop：该prop的选项对象 name：prop名 value：该prop接收的值 absent：父组件有没有传该prop数据
+    if (prop.required && absent) {//该prop必传，但外界没有传，警告提示，立即返回
       warn('缺少必传的prop:"' + name + '"', vm);
       return
     }
-    if (value == null && !prop.required) return
-    // value为null或undefined，并且该prop是非必须的，就不需要做后续的校验
-
-    var type = prop.type;
-    var valid = !type || type === true; // 判断外界传递的prop值的类型与期望的类型是否相符
-    // 如果开发者没有规定该prop值的类型，则不需要校验，无论外界传递什么都有效，或者在定义prop时直接type:true，也代表不用prop校验。这两种情况为true，其他false，定初始值
-    var expectedTypes = [];
-    // expectedTypes数组用来保存类型的字符串表示，当校验失败时会通过打印该数组中收集的类型来提示开发者应该传递哪些类型的数据。接着进入一个 if 语句块，其判断条件为 if (type)，只有当 type 存在时才需要做类型校验，在该 if 语句块内首先是这样一段代码：
-    if (type) { // type是数组，如果不是，包成数组。for循环遍历type
+    if (value == null && !prop.required) return // 该prop接收的是null/undefined，且该prop没有规定必传，直接返回，不需要做后续的校验
+    var type = prop.type; // 获取用户给该prop规定的type
+    var valid = !type || type === true; //如果没有规定type或type值为true，都代表无论外界传说明都有效，不用校验类型，此时valid为真
+    var expectedTypes = [] // expectedTypes数组用来保存期望类型的字符串表示，它的用处是当校验失败时，通过打印该数组收集的类型来提示用户该传哪些类型的值
+    // if判断只有当type存在时才需要做类型的基本校验
+    if (type) { //如果type存在但不是数组，强制包成数组
       if (!Array.isArray(type)) {
         type = [type];
       }
-      for (var i = 0; i < type.length && !valid; i++) {
-        // 调用assertType做类型断言，assertType 函数的具体实现我们后面再讲，现在大家只需要知道 assertType 函数的返回值是一个如下结构的对象即可：{expectedType: 'String',valid: true} expectedType 属性就是类型的字符串表示，valid属性的真假代表了该 prop 值是否通过了校验。
+      for (var i = 0; i < type.length && !valid; i++) { //for循环遍历type
+        // 调用assertType做类型校验，返回一个对象类似:{expectedType:'String',valid:true} expectedType值是期望的类型，valid值表示该prop值是否通过了校验
         var assertedType = assertType(value, type[i]);
         expectedTypes.push(assertedType.expectedType || '');
         valid = assertedType.valid;
-        // 一旦某个类型校验通过，valid变为真，for循环终止，这是因为该 prop 值的类型只要满足期望类型中的一个即可。假设for循环结束后 valid 依然为假，则说明该 prop 值的类型不在期望的类型之中，此时在 for 循环之后的代码将发挥作用，如下：
+        // 某个prop的类型校验通过，valid为真，for循环终止，因为该prop值的类型只要满足期望类型中的一个即可。如果for循环结束后valid依然为假，说明该prop值的类型不在期望的类型之中
       }
     }
-    // valid为假，警告开发者所传的prop值的类型不符合预期。打印expectedTypes数组中的类型字符串告诉开发者该prop所期望的类型。同时通过toRawType 函数获取真正的 prop 值的类型并提示
-    if (!valid) {
+    if (!valid) { // 如果valid为假，提示用户传的prop值的类型不符合预期
       warn(getInvalidTypeMessage(name, value, expectedTypes), vm);
       return
     }
-    // 到这步说明前面的校验全部通过。prop可以指定validator属性值：自定义校验函数，函数返回值为校验结果。调用该函数并判断，为假说明自定义校验失败，警告提示该 prop 自定义校验失败。
-    var validator = prop.validator;
+    // 到这里了基本校验已结束。但prop可以指定validator自定义校验函数，函数返回值为校验结果
+    var validator = prop.validator
     if (validator) {
-      if (!validator(value)) {
-        warn('Invalid prop: custom validator check failed for prop "' + name + '".', vm);
+      if (!validator(value)) { // 调用validator对prop值判断，为假
+        warn('无效的prop值: 自定义的validator校验prop失败"' + name + '".', vm);
       }
     }
   }
 
-  function assertType (value, type) {
+  function assertType (value, type) { // prop值 和 类型的构造函数
     var valid;
-    var expectedType = getType(type); // 类型的字符串
+    var expectedType = getType(type); // 传入类型的构造函数，返回类型的字符串
     if (/^(String|Number|Boolean|Function|Symbol)$/.test(expectedType)) {
-      // 'String''Number''Boolean''Function''Symbol'这5种共同特点是都可以通过typeof区分
-      var t = typeof value;
-      valid = t === expectedType.toLowerCase(); // 如果全等说明该prop的值与期望类型相同，valid为真
-      // for primitive wrapper objects
-      if (!valid && t === 'object') { // 期望的类型是上面5种类型之一，且通过typeof取到的prop值的类型是对象，且和期望的类型不同。但真的一定不同吗，js有基本包装类型，let str = new String('基本包装类型')你typeof str会得到'object'，但str确实是字符串。进一步判断value是否是type的实例，如果是则该 prop 值是有效的。
-        valid = value instanceof type;
+      // String Number Boolean Function Symbol这5种可以通过typeof区分
+      var t = typeof value; // 获取prop值的typeof类型
+      valid = t === expectedType.toLowerCase() //如果全等说明该prop的值与期望类型相同，valid为真
+      if (!valid && t === 'object') { //如果valid为假且typeof value的值为'object'，valid为假就一定不符合期望类型吗？JS有基本包装类型，比如typeof new String('xxx')就会得到'object'，从而和expectedType不相同，但它确实是字符串，所以用typeof是不完善的，还要进一步判断value是否是type的实例。
+        valid = value instanceof type //如果valid为真，说明prop值符合预期类型
       }
-    } else if (expectedType === 'Object') {
-      valid = isPlainObject(value);
+    } else if (expectedType === 'Object') { // 如果预期类型是对象
+      valid = isPlainObject(value); // 判断是否是纯对象
     } else if (expectedType === 'Array') {
       valid = Array.isArray(value);
     } else {
       valid = value instanceof type;
     }
-    return {
-      valid,
-      expectedType
-    }
+    return { valid, expectedType } // 比如 { valid:true, expectedType:'Object'}
   }
 
-  // 这是在说简单的类型之间直接比较在不同的 iframes / vms 之间是不管用的，我们回想一下如何判断一个数据是否是数组的方法，其中一个方法就是使用 instanceof 操作符：
-  // getType接收一个函数，使用正则去匹配该函数转成的字符串，并捕获函数名，如果捕获成功则返回函数名，否则返回空字符串。
+  // getType接收一个函数，使用正则去匹配该函数转成的字符串，捕获函数名，如果匹配成功，则返回捕获的函数名，否则返回空字符串。
   function getType (fn) {
     var match = fn && fn.toString().match(/^\s*function (\w+)/);
     return match ? match[1] : ''
   }
 
-  function isSameType (a, b) {
-    return getType(a) === getType(b)
-  }
-  // getTypeIndex 返回值 > -1，则说明给定的类型构造函数在期望的类型构造函数之中
-  function getTypeIndex (type, expectedTypes) {
-    // expectedTypes 不是数组那说明是一个单一的类型构造函数
-    if (!Array.isArray(expectedTypes)) {
-      return isSameType(expectedTypes, type) ? 0 : -1
-      // isSameType 作用是判断给定的两个类型构造函数是否相同
+  const isSameType = (a, b) => getType(a) === getType(b)//判断两个类型构造函数是否相同
+
+  // getTypeIndexget获取给定的type在期望类型数组中的位置，不存在则返回-1
+  function getTypeIndex (type, expectedTypes) { 
+    if (!Array.isArray(expectedTypes)) {//expectedTypes不是数组，说明期待的类型只有一个，expectedTypes是单个的类型构造函数，判断它和type是否是同一个构造函数
+      return isSameType(expectedTypes, type) ? 0 : -1 // 相同则返回0，不同则返回-1
     }
-    // 如果 expectedTypes 是数组，则遍历该数组中的每一个类型构造函数，并使用 isSameType 函数让其与给定的类型构造函数做对比，如果二者相同则直接返回给定类型构造函数在 expectedTypes 数组中的位置，如果没有找到返回 -1。
-    for (var i = 0, len = expectedTypes.length; i < len; i++) {
-      if (isSameType(expectedTypes[i], type)) {
-        return i
+    // expectedTypes是数组
+    for (var i = 0; i < expectedTypes.length; i++) { //遍历数组中的每一个类型构造函数
+      if (isSameType(expectedTypes[i], type)) { // 给定的type和每一项做对比
+        return i // 如果相同则返回当前项在数组中的位置，如果没有相同的返回-1
       }
     }
     return -1
@@ -2288,10 +2257,10 @@
     },
 
     prepatch (oldVnode, vnode) {
-      var options = vnode.componentOptions;
+      var options = vnode.componentOptions//获取vnode对应的组件的配置对象
       var child = vnode.componentInstance = oldVnode.componentInstance;
       updateChildComponent(
-        child,
+        child, // 旧vnode的组件实例，同样也是新vnode的组件实例
         options.propsData, // updated props
         options.listeners, // updated listeners
         vnode, // new parent vnode
@@ -2934,15 +2903,14 @@
     };
   }
 
-  var activeInstance = null; // activeInstance总是当前正在渲染的实例
-
+  var activeInstance = null; // activeInstance指向当前正在渲染的实例
   var isUpdatingChildComponent = false;
 
-  function setActiveInstance(vm) {
+  function setActiveInstance(vm) { // 将传入的vm赋给activeInstance
     var prevActiveInstance = activeInstance;
     activeInstance = vm;
-    return function () {
-      activeInstance = prevActiveInstance;
+    return () => {//返回一个函数，函数执行会将上一个活跃的实例赋给activeInstance
+      activeInstance = prevActiveInstance // 这里又用了闭包
     }
   }
 
@@ -2976,14 +2944,14 @@
       var vm = this
       var prevEl = vm.$el;
       var prevVnode = vm._vnode;
-      var restoreActiveInstance = setActiveInstance(vm);
+      var restoreActiveInstance = setActiveInstance(vm);//当前vm为活跃实例
       vm._vnode = vnode;
-      if (!prevVnode) { // 如果prevVnode不存在，即初始化的时候，执行__patch__方法渲染成真实的DOM
+      if (!prevVnode) { // 如果prevVnode不存在，则为第一次渲染
         vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false/*removeOnly*/)
-      } else { // 如果prevVnode存在，即更新操作时，调用__patch__进行更新操作
+      } else { // 如果prevVnode存在，属于更新操作
         vm.$el = vm.__patch__(prevVnode, vnode);
       }
-      restoreActiveInstance();
+      restoreActiveInstance() //活跃实例恢复为之前的那个
       // update__vue__ reference
       if (prevEl) {
         prevEl.__vue__ = null;
@@ -3046,7 +3014,7 @@
       }
     };
   }
-
+  // 更新子组件
   function updateChildComponent(vm, propsData, listeners, parentVnode, renderChildren) {
     isUpdatingChildComponent = true;
     // determine whether component has slot children
@@ -3082,7 +3050,7 @@
     vm.$attrs = parentVnode.data.attrs || emptyObject;
     vm.$listeners = listeners || emptyObject;
 
-    // updateprops
+    // update props
     if (propsData && vm.$options.props) {
       toggleObserving(false);
       var props = vm._props;
@@ -3095,7 +3063,7 @@
       toggleObserving(true);
       // keep a copy of raw propsData
       vm.$options.propsData = propsData;
-      // vm.$options.propsData 的更新是在调用 validateProp 之后，所以组件更新之前 vm.$options.propsData 是上一次组件更新或创建时的数据
+      // vm.$options.propsData的更新是在调用 validateProp 之后，所以组件更新之前 vm.$options.propsData是上一次组件更新或创建时的数据
     }
 
     // updatelisteners
@@ -3473,61 +3441,54 @@
   }
 
   function initState (vm) {
-    vm._watchers = []; // 记录vm实例的所有watcher，包括渲染函数的和非渲染函数的
-    var opts = vm.$options;
+    vm._watchers = [] // 记录vm实例的所有watcher，包括渲染函数的和非渲染函数的
+    var opts = vm.$options
     if (opts.props) {
-      initProps(vm, opts.props); // props选项经过规范化处理，是纯对象格式
+      initProps(vm, opts.props); // 初始化props，opts.props是经过规范化后的
     }
     if (opts.methods) {
-      initMethods(vm, opts.methods);
+      initMethods(vm, opts.methods); // 初始化methods
     }
-    if (opts.data) {
-      initData(vm); // 初始化data
-    } else {
-      observe(vm._data = {}, true /* 根data */);
-      // 开发者没有传 data 选项，则观测一个空对象，并让vm._data引用这个空对象
+    if (opts.data) { // 如果有data，初始化data
+      initData(vm);
+    } else { //如果开发者没有传data选项，则将{}赋给vm._data，对它进行观测
+      observe(vm._data = {}, true/*根data*/) // 根data是一个空对象
     }
     if (opts.computed) {
       initComputed(vm, opts.computed); // 初始化computed
     }
-  
-    if (opts.watch) {// 用户传了watch选项，才执行初始化watch
-      initWatch(vm, opts.watch);
+    if (opts.watch) {
+      initWatch(vm, opts.watch);// 初始化watch
     }
   }
 
-  function initProps(vm, propsOptions) { // 第二个参数接收规范化后的props选项
-    var propsData = vm.$options.propsData || {}; //propsData保存来自父组件的真实props数据
-    var props = vm._props = {}; // 定义props常量和vm._props属性，初始值为空对象
-    var keys = vm.$options._propKeys = []; // 在vm.$options上添加_propKeys属性，值为一个空数组
+  function initProps(vm, propsOptions) { // propsOptions是规范化后的props选项对象
+    var propsData = vm.$options.propsData || {}//propsData保存来自父组件的真实props数据
+    var props = vm._props = {} // 定义props常量和vm._props属性，初始值为空对象
+    vm.$options._propKeys = []; // 在vm.$options上添加_propKeys属性，值为一个空数组
     var isRoot = !vm.$parent; // 标识是否为根组件，vm.$parent不存在说明是根组件。
-    if (!isRoot) { // 如果不是根组件，就不需要将props的值转成响应式数据，根组件则深度观测prop值
-      toggleObserving(false);
+    if (!isRoot) { // 如果不是根组件，就不需要将props响应式化，根组件才要深度观测prop值
+      toggleObserving(false) // 因为非根组件的prop数据的响应式与否是由父组件决定的
     }
     for (var key in propsOptions) { // 遍历props选项对象，key为prop名
-      keys.push(key); // prop名逐个推入vm.$options._propKeys数组中
+      vm.$options._propKeys.push(key); // 将prop名推入vm.$options._propKeys数组中
       var value = validateProp(key, propsOptions, propsData, vm);
-      // validateProp用来校验key对应的prop数据是否符合预期的类型，并返回相应的prop的值（或默认值）
-      // 也即value保存着prop的值
-      var hyphenatedKey = hyphenate(key); // 将prop名做驼峰转连字符加小写处理，判断它是否是保留的属性名
-      if (isReservedAttribute(hyphenatedKey) || config.isReservedAttr(hyphenatedKey)) {
-        warn((hyphenatedKey + "不能使用保留的属性名作为 prop 的名字"), vm);
+      // 校验prop名对应的prop数据的类型是否符合预期，并返回相应的prop的值(可能是默认值)
+      var hyphenatedKey = hyphenate(key); // HTML中的属性名是大小写不敏感的，浏览器会把所有大写字符解释为小写字符，这意味着prop名用驼峰命名法，但在模板中要用连字符写法
+      if (isReservedAttribute(hyphenatedKey) || config.isReservedAttr(hyphenatedKey)) { // 模板中的prop属性不能是Vue保留的属性：key,ref,slot,slot-scope,is，也不能是style,class
+        warn((hyphenatedKey + "不能使用保留的属性名作为prop名"), vm)
       }
-      // 调用defineReactive将prop定义到props对象上，即vm._props上，并成为响应式属性
-      // 注意defineReactive中，会对属性值做深度观测，但如果shouldObserve是false，那observe(val)就无效。
-      // 即如果当前不是根组件，prop的值不会被观测，即不会将prop值转成响应式数据，因为props数据是来自父组件的，它本身可能已经是响应式的，不需要重新观测。
-      defineReactive$$1(props, key, value, () => {
-        if (!isRoot && !isUpdatingChildComponent) {
+      // 调用defineReactive将prop定义到vm._props对象上，定义为响应式属性，并且是深度观测
+      defineReactive$$1(props, key, value, () => { //customSetter，修改属性值时触发
+        if (!isRoot && !isUpdatingChildComponent) { //如果当前不是根组件，且不是正在更新子组件，提示不要直接修改prop值
           warn(`不要直接修改一个prop，因为每当父组件重新渲染时，prop值就会被覆盖："${key}"`, vm)
         }
-        // defineReactive的第四个参数是customSetter，自定义setter，它会在你修改props值时触发
       })
       // props本质上和data一样，不同的是数据来源，data定义在组件自身，props数据来自父组件
-      if (!(key in vm)) {
-        proxy(vm, "_props", key);
-        // 在vm上定义同名prop属性，值是由vm._props代理，这样就能通过vm直接访问props中的prop
-        // 注意到：只有当key这个名不存在在vm或它的原型链上，才会进行代理，这是一个针对子组件的优化操作，对于子组件来讲这个代理工作在创建子组件构造函数时就完成了，即在Vue.extend函数中完成的，这么做的目的是避免每次创建子组件实例时都会调用 proxy 函数去做代理，由于 proxy 函数中使用了 Object.defineProperty 函数，该函数的性能表现不佳，所以这么做能够提升一定的性能指标。
+      if (!(key in vm)) { // 如果key这个prop在vm和它的原型链上没有定义
+        proxy(vm, "_props", key) // 则让vm代理vm._props中的prop，通过vm就能直接访问props中的prop
       }
+      // 注意到，只有prop名在vm或它的原型链上没有定义，才会进行代理。这是一个针对子组件的优化操作，对于子组件来说这个代理工作在创建子组件构造函数时就完成了，即在Vue.extend函数中完成的，这么做的目的是避免每次创建子组件实例时都会调用proxy函数去代理，由于proxy函数中使用了Object.defineProperty，它的性能表现不佳，所以这可以提升一定性能
     }
     toggleObserving(true);
   }
@@ -4418,13 +4379,13 @@
 
   // 新旧vnode相似的话，则旧vnode就可以复用。我们知道，销毁一个DOM节点然后创建一个新的再插入是消耗很大的，无论是DOM对象本身的复杂性，还是这引起的重绘重排。所以期望尽可能复用现有的vnode进行更新
   function sameVnode(a, b) {
-    return a.key === b.key && // key是来自v-for自动添加的，或自定义的:key属性，两个vnode相似就必须它们的key相同。key属性如果没有设置，则默认是undefined，当v-for渲染列表时会给节点一个唯一的key，key不一样的节点不进行复用。
-      ( // 下面这两个其中一个为真就行
+    return a.key === b.key && // key是来自v-for自动添加的或自定义的:key属性，两个vnode相似就必须它们的key相同。key属性如果没有设置，则默认是undefined，当v-for渲染列表时会给节点一个唯一的key，key不一样的节点不进行复用。
+      ( // 下面两个只要有一个为真就行
         (
-          a.tag === b.tag && //复用的vnode必须标签名一样，因为没有更改标签名的api
-          a.isComment === b.isComment && //isComment代表是否是注释节点，如果有一个是另一个不是，是不能复用的，因为注释节点和普通DOM节点不是一种东西
+          a.tag === b.tag && //相同的vnode必须标签名一样
+          a.isComment === b.isComment && //isComment代表是否是注释节点，注释节点和非注释节点是不相同的，不能复用的
           isDef(a.data) === isDef(b.data) && //如果一个有data一个没有任何属性，没必要进行复用，还不如直接渲染一个新的
-          sameInputType(a, b) //不同type属性的input标签，相当于不同的标签了，不复用
+          sameInputType(a, b) //不同type属性的input元素，相当于不同的元素了，不复用
         ) || ( // 暂时不看先，比较少用到
           isTrue(a.isAsyncPlaceholder) &&
           a.asyncFactory === b.asyncFactory &&
@@ -4449,7 +4410,7 @@
     return map
   }
 
-  // 内部定义了很多辅助方法，最终返回patch函数，它会赋给Vue.prototype.__patch__。函数接收的是{nodeOps,modules}，nodeOps是关于DOM操作的方法集合。patch是平台相关的，在web和weex环境把虚拟DOM映射为平台的真实DOM的方法是不同的，并且对DOM包含的属性模块和更新也不同，因此每个平台都有各自的nodeOps,modules
+  // 内部定义了很多辅助方法，最终返回patch函数，它会赋给__patch__。函数接收的是{nodeOps,modules}，nodeOps是关于DOM操作的方法集合。patch是平台相关的，在web和weex环境把虚拟DOM映射为平台的真实DOM的方法是不同的，并且对DOM包含的属性模块和更新也不同，因此每个平台都有各自的nodeOps,modules
   function createPatchFunction({ nodeOps, modules }) {
     var i, j;
     var cbs = {};
@@ -4503,45 +4464,44 @@
 
     var creatingElmInVPre = 0;
 
-    // 创建并插入DOM元素
+    // createElm函数包含DOM节点的创建和插入两部分。DOM的三种节点类型：元素、注释和文字节点，都是使用了对应的原生方法，nodeops对象是预先导入了的原生DOM操作方法的集合，具体可以在运行时的处理中确认。之前生成的vnode决定了最终应该生成何种节点，最终生成的真实DOM节点依赖于vnode携带的信息，即vnode是实现生成真实DOM的基础
     function createElm(vnode, insertedVnodeQueue, parentElm, refElm, nested, ownerArray, index) {
-      if (isDef(vnode.elm) && isDef(ownerArray)) { // 如果vnode有对应的真实DOM节点，且有传ownerArray(具体它的含义目前我还没确定)，则将vnode对象克隆一份，赋给ownerArray[index]和vnode
-        // 如果该vnode在以前的渲染中使用过，现在它要被用作新节点，m将导致潜在的patch错误。相反，在为节点创建关联的DOM元素之前，将它改为克隆本身的节点。
+      if (isDef(vnode.elm) && isDef(ownerArray)) { // 如果vnode有对应的真实DOM节点，且有传ownerArray(具体它的含义目前我还没确定)，代表vnode在之前的渲染中用过，现在它要被用作新节点时，将导致潜在的patch错误，所以将vnode对象克隆一份，赋给ownerArray[index]和vnode
         vnode = ownerArray[index] = cloneVNode(vnode)
       }
-
       vnode.isRootInsert = !nested; // 为检查过渡动画入口
       if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) return
-
-      var data = vnode.data;
-      var children = vnode.children;
-      var tag = vnode.tag;
-      if (isDef(tag)) {
-        if (data && data.pre) {
-          creatingElmInVPre++;
+      // 这个判断用于keep-alive组件，若是普通组件则会返回undefined继续往下执行
+      var data = vnode.data; // 获取vnode的节点信息data
+      var children = vnode.children; // 获取vnode的子vnode
+      var tag = vnode.tag; // 获取vnode的标签名
+      if (isDef(tag)) { // 标签名存在，说明是元素节点(普通节点)
+        if (data && data.pre) { //如果存在节点信息，并且使用了v-pre指令
+          creatingElmInVPre++ // (在v-pre指令中创建的节点)计数器+1
         }
         if (isUnknownElement$$1(vnode, creatingElmInVPre)) {
           warn('Unknown custom element: <' + tag + '> - did you register the component correctly? For recursive components, make sure to provide the "name" option.', vnode.context);
         }
-
+        // 根据ns属性的真假，有2种创建节点的方式 创建节点
         vnode.elm = vnode.ns
           ? nodeOps.createElementNS(vnode.ns, tag)
           : nodeOps.createElement(tag, vnode);
-        setScope(vnode);
+        setScope(vnode); // 设置节点的作用域ID
+        // 在web平台，先创建子节点插入父级后再一次性插入DOM中
         createChildren(vnode, children, insertedVnodeQueue);
-        if (isDef(data)) { // 针对指针的处理
+        if (isDef(data)) { // 针对指令的处理
           invokeCreateHooks(vnode, insertedVnodeQueue);
         }
-        insert(parentElm, vnode.elm, refElm);
+        insert(parentElm, vnode.elm, refElm) //插入到真实DOM中
         if (data && data.pre) {
           creatingElmInVPre--;
         }
-      } else if (isTrue(vnode.isComment)) {
+      } else if (isTrue(vnode.isComment)) { // vnode对应的是注释节点
         vnode.elm = nodeOps.createComment(vnode.text);
-        insert(parentElm, vnode.elm, refElm);
-      } else {
+        insert(parentElm, vnode.elm, refElm);//创建注释节点然后插入到DOM
+      } else { // vnode对应的是文本节点
         vnode.elm = nodeOps.createTextNode(vnode.text);
-        insert(parentElm, vnode.elm, refElm);
+        insert(parentElm, vnode.elm, refElm);//创建文本节点然后插入到DOM
       }
     }
 
@@ -4701,7 +4661,7 @@
       }
     }
 
-    function removeVnodes (parentElm, vnodes, startIdx, endIdx) {
+    function removeVnodes(parentElm, vnodes, startIdx, endIdx) {
       for (; startIdx <= endIdx; ++startIdx) {
         var ch = vnodes[startIdx];
         if (isDef(ch)) {
@@ -4743,41 +4703,42 @@
         removeNode(vnode.elm);
       }
     }
-
-    function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
-      var oldStartIdx = 0;
-      var newStartIdx = 0;
-      var oldEndIdx = oldCh.length - 1;
-      var oldStartVnode = oldCh[0];
-      var oldEndVnode = oldCh[oldEndIdx];
-      var newEndIdx = newCh.length - 1;
-      var newStartVnode = newCh[0];
-      var newEndVnode = newCh[newEndIdx];
+    // 整个DOM节点对比更新的核心逻辑函数：
+    function updateChildren(parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
+      var oldStartIdx = 0; // 旧节点的开始索引
+      var newStartIdx = 0; // 新节点的开始索引
+      var oldEndIdx = oldCh.length - 1; // 旧子节点的结束索引
+      var oldStartVnode = oldCh[0]; // 旧子节点的首节点
+      var oldEndVnode = oldCh[oldEndIdx]; // 旧子节点的尾节点
+      var newEndIdx = newCh.length - 1; // 新子节点的结束索引
+      var newStartVnode = newCh[0]; // 新子节点的首节点
+      var newEndVnode = newCh[newEndIdx]; // 新子节点的尾节点
       var oldKeyToIdx, idxInOld, vnodeToMove, refElm;
 
-      // removeOnly is a special flag used only by <transition-group>
-      // to ensure removed elements stay in correct relative positions
-      // during leaving transitions
+      // removeOnly只用在<transition-group>的特殊标识，确保移除的元素留在正确的相对位置，在离开过渡期间
       var canMove = !removeOnly;
+      checkDuplicateKeys(newCh) //检查新子节点中有没有重复的key
 
-      checkDuplicateKeys(newCh);
-
+      // 逐一比对对应索引位置的节点，while循环只在新旧开始索引同时小于各自结束索引才继续进行
       while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-        if (isUndef(oldStartVnode)) {
-          oldStartVnode = oldCh[++oldStartIdx]; // Vnode has been moved left
-        } else if (isUndef(oldEndVnode)) {
-          oldEndVnode = oldCh[--oldEndIdx];
-        } else if (sameVnode(oldStartVnode, newStartVnode)) {
+        if (isUndef(oldStartVnode)) {//如果旧的开始节点不存在，则增加旧节点的开始索引
+          oldStartVnode = oldCh[++oldStartIdx] //将旧的开始节点后移一个
+        } else if (isUndef(oldEndVnode)) { //旧的开始节点存在，但旧的结束节点不存在
+          oldEndVnode = oldCh[--oldEndIdx] //旧的结束节点前移一个
+        } else if (sameVnode(oldStartVnode, newStartVnode)) {//新旧的开始节点是同一个节点
+          // 调用patchVnode，对比新旧的同一个子节点，更新DOM
           patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx);
-          oldStartVnode = oldCh[++oldStartIdx];
-          newStartVnode = newCh[++newStartIdx];
-        } else if (sameVnode(oldEndVnode, newEndVnode)) {
+          oldStartVnode = oldCh[++oldStartIdx] //旧的开始节点后移一个
+          newStartVnode = newCh[++newStartIdx]; //新的开始节点后移一个
+        } else if (sameVnode(oldEndVnode, newEndVnode)) { //新旧的结束节点是同一个节点
+          // 调用patchVnode，对比新旧的同一个节点，更新DOM
           patchVnode(oldEndVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx);
-          oldEndVnode = oldCh[--oldEndIdx];
-          newEndVnode = newCh[--newEndIdx];
-        } else if (sameVnode(oldStartVnode, newEndVnode)) { // Vnode moved right
+          oldEndVnode = oldCh[--oldEndIdx] // 新的开始节点前移一个
+          newEndVnode = newCh[--newEndIdx] // 新的结束节点前移一个
+        } else if (sameVnode(oldStartVnode, newEndVnode)) { // 旧的开始节点和新的结束节点相同
+          // 调用patchVnode，对比，更新
           patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx);
-          canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm));
+          canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm)) //canMove为真则将当前旧首节点移动到下一兄弟节点前
           oldStartVnode = oldCh[++oldStartIdx];
           newEndVnode = newCh[--newEndIdx];
         } else if (sameVnode(oldEndVnode, newStartVnode)) { // Vnode moved left
@@ -4786,7 +4747,9 @@
           oldEndVnode = oldCh[--oldEndIdx];
           newStartVnode = newCh[++newStartIdx];
         } else {
-          if (isUndef(oldKeyToIdx)) { oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx); }
+          if (isUndef(oldKeyToIdx)) {
+            oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx);
+          }
           idxInOld = isDef(newStartVnode.key)
             ? oldKeyToIdx[newStartVnode.key]
             : findIdxInOld(newStartVnode, oldCh, oldStartIdx, oldEndIdx);
@@ -4836,14 +4799,14 @@
       }
     }
 
-    // 这是一个从虚拟的VNode对象创建一个真实节点的过程
+    // 对比新旧vnode并DOM更新。首先是按照新vnode是否是文字节点来分情况，如果是新节点是文字节点，则可以不管旧节点的情况，除非旧节点也是文本节点且内容无异，才不需要处理，其他情况下都直接将DOM元素的文本内容置为新vnode的文本。如果新节点不是文字节点，处理再细分为四种情况：1、新旧vnode的子节点都存在且不相等时，执行updateChildren。2、只有新子节点存在而旧子节点不存在，如果旧节点是文字节点，先要置空旧节点的文本内容，再向DOM元素添加新子字节点。3、只有旧子节点存在而新子节点不存在时，说明更新后没有子节点了，执行移除操作。4、新旧子节点不存在而旧节点是文字节点时，清空DOM元素的文本内容。
     function patchVnode(oldVnode, vnode, insertedVnodeQueue, ownerArray, index, removeOnly) {
-      if (oldVnode === vnode) return
+      if (oldVnode === vnode) return //新旧vnode相同 则直接返回
       if (isDef(vnode.elm) && isDef(ownerArray)) {
         // clone reused vnode
         vnode = ownerArray[index] = cloneVNode(vnode);
       }
-
+      // 旧vnode挂载的DOM元素赋给新vnode的elm属性和elm变量
       var elm = vnode.elm = oldVnode.elm;
 
       if (isTrue(oldVnode.isAsyncPlaceholder)) {
@@ -4854,11 +4817,7 @@
         }
         return
       }
-
-      // reuse element for static trees.
-      // note we only do this if the vnode is cloned -
-      // if the new node is not cloned it means the render functions have been
-      // reset by the hot-reload-api and we need to do a proper re-render.
+      // 如果vnode是静态节点，且旧vnode也是静态节点，且新旧vnode的key值一样，且新vnode是克隆节点或一次性节点，则旧vnode的组件实例赋给新vnode的组件实例，然后返回
       if (isTrue(vnode.isStatic) &&
         isTrue(oldVnode.isStatic) &&
         vnode.key === oldVnode.key &&
@@ -4871,11 +4830,12 @@
       var i;
       var data = vnode.data;
       if (isDef(data) && isDef(i = data.hook) && isDef(i = i.prepatch)) {
-        i(oldVnode, vnode);
+        i(oldVnode, vnode)//如果vnode的data中有内联预处理钩子，调用传入新旧vnode
       }
 
-      var oldCh = oldVnode.children;
-      var ch = vnode.children;
+      var oldCh = oldVnode.children; // 旧vnode的子节点
+      var ch = vnode.children; // 新vnode的子节点
+      // 如果存在更新钩子则调用
       if (isDef(data) && isPatchable(vnode)) {
         for (i = 0; i < cbs.update.length; ++i) {
           cbs.update[i](oldVnode, vnode);
@@ -4884,27 +4844,30 @@
           i(oldVnode, vnode);
         }
       }
-      if (isUndef(vnode.text)) {
-        if (isDef(oldCh) && isDef(ch)) {
-          if (oldCh !== ch) {
+      if (isUndef(vnode.text)) { //如果新vnode没有text属性，说明不是文本节点
+        if (isDef(oldCh) && isDef(ch)) { // 新旧vnode都有子节点
+          if (oldCh !== ch) { //子节点不一样，更新子节点
             updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly);
+            //只有当新旧vnode和各自子vnode都是元素节点时，才要调用updateChildren进行深入比较，其他的情况都可以比较简便地处理DOM节点的更新，避免了不必要的处理，提高了渲染性能
           }
-        } else if (isDef(ch)) {
-          {
-            checkDuplicateKeys(ch);
-          }
-          if (isDef(oldVnode.text)) { nodeOps.setTextContent(elm, ''); }
+        } else if (isDef(ch)) { // 只有新vnode有子节点
+          checkDuplicateKeys(ch);
+          if (isDef(oldVnode.text)) { //如果旧vnode的text存在，但新vnode没有
+            nodeOps.setTextContent(elm, '')//将elm的textContent属性置为''
+          }//调用addVnodes增加真实的子节点
           addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue);
-        } else if (isDef(oldCh)) {
-          removeVnodes(elm, oldCh, 0, oldCh.length - 1);
-        } else if (isDef(oldVnode.text)) {
-          nodeOps.setTextContent(elm, '');
+        } else if (isDef(oldCh)) { // 旧vnode有子节点，新vnode没有
+          removeVnodes(elm, oldCh, 0, oldCh.length - 1)//移除elm的所有子节点
+        } else if (isDef(oldVnode.text)) {//都没有子节点，但旧vnode是文本节点
+          nodeOps.setTextContent(elm, '') //将elm的textContent赋为''
         }
-      } else if (oldVnode.text !== vnode.text) {
-        nodeOps.setTextContent(elm, vnode.text);
+      } else if (oldVnode.text !== vnode.text) {//新vnode有text
+        nodeOps.setTextContent(elm, vnode.text);// 设置elm的文本内容
       }
       if (isDef(data)) {
-        if (isDef(i = data.hook) && isDef(i = i.postpatch)) { i(oldVnode, vnode); }
+        if (isDef(i = data.hook) && isDef(i = i.postpatch)) {
+          i(oldVnode, vnode);//如果存在后置处理钩子则调用
+        }
       }
     }
 
@@ -5027,26 +4990,25 @@
         return node.nodeType === (vnode.isComment ? 8 : 3)
       }
     }
-
-    // 返回patch函数，它接收新旧vnode对象，和hydrating, removeOnly标识
-    return function patch (oldVnode, vnode, hydrating, removeOnly) {
-      if (isUndef(vnode)) { // 如果新vnode没有定义但存在旧vnode
-        if (isDef(oldVnode)) invokeDestroyHook(oldVnode)//销毁旧的vnode节点
-        return // 新结构是不存在的，清空旧节点就行，然后直接返回
+    // 返回patch函数，它接收新旧vnode对象，和hydrating，removeOnly标识
+    return function patch(oldVnode, vnode, hydrating, removeOnly) {
+      // 如果新vnode节点没有定义，但旧的vnode节点存在，则说明旧节点在变动后没有生成新的节点，则销毁旧vnode节点并返回，如果新旧vnode都没有定义，直接返回
+      if (isUndef(vnode)) {
+        if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
+        return
       }
       var isInitialPatch = false; //是否是初次patch
       var insertedVnodeQueue = []; //insertedVnodeQueue队列
-      // vnode存在
+      // 新的vnode节点存在，分两种情况：存在旧的vnode节点，不存在旧vnode节点
       if (isUndef(oldVnode)) { // 如果不存在旧的vnode节点，则创建新的根元素
-        isInitialPatch = true //初次patch，或叫空挂载
+        isInitialPatch = true // 初次patch，属于空挂载
         createElm(vnode, insertedVnodeQueue) //根据vnode创建新的DOM节点
-      } else { //存在旧的vnode节点，要判断旧的vnode是否是真实的DOM元素
-        var isRealElement = isDef(oldVnode.nodeType);
-        if (!isRealElement && sameVnode(oldVnode, vnode)) { //如果旧vnode不是真实的DOM元素，且新旧节点满足旧节点可复用的条件，则比较新旧节点，更新DOM
-          // 调用patchVnode，传入的insertedVnodeQueue是空数组
+      } else { // 如果存在旧的vnode节点，要判断旧的vnode是否是真实的DOM元素
+        var isRealElement = isDef(oldVnode.nodeType) // 是否挂载到真实DOM元素
+        if (!isRealElement && sameVnode(oldVnode, vnode)) { // 如果旧vnode不是真实的DOM元素，且新旧节点满足旧节点可复用的条件，则比较新旧节点，更新DOM。调用patchVnode实现，第三个参数是空数组
           patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly);
-        } else { // 旧vnode不满足复用的条件，且它的确挂载在真实DOM元素
-          if (isRealElement) { 
+        } else {
+          if (isRealElement) { // 旧vnode是挂载到真实DOM元素，但不满足复用条件
             // 检查是否是服务端渲染，旧vnode的节点类型是元素节点，且
             if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
               oldVnode.removeAttribute(SSR_ATTR);
@@ -5064,42 +5026,44 @@
             // 如果不是服务端渲染，或者合并失败，则生成空的vnode节点覆盖oldVnode
             oldVnode = emptyNodeAt(oldVnode)//因为旧vnode复用不了，没有利用价值了
           }
-
-          // 旧vnode对应的原生DOM节点赋给oldElm变量，它的父节点获取到并赋给parentElm
-          var oldElm = oldVnode.elm //这是定义了旧的DOM节点和其父节点
-          var parentElm = nodeOps.parentNode(oldElm)
-
+          /**
+            1 没有新旧vnode
+              直接返回
+            2 有旧vnode 没有新vnode
+              销毁旧vnode 再返回
+            3 有新vnode
+              3.1 有新vnode 没有旧vnode
+                调用createElm 根据新的vnode创建新的DOM节点
+              3.2 有新vnode 有旧vnode
+                3.2.1 旧vnode挂在真实DOM元素，且可复用
+                  调用patchVnode比较新旧vnode 更新DOM
+                3.2.2 旧vnode挂在真实DOM元素，但不能复用
+                  旧vnode没有利用价值，生成空vnode节点覆盖旧vnode
+           */
+          var oldElm = oldVnode.elm// oldElm指向旧vnode对应的原生DOM节点
+          var parentElm = nodeOps.parentNode(oldElm) // parentElm指向oldElm的父节点
           // 根据新的vnode创建新的原生DOM元素，并且插入到DOM树中
           createElm( // 它的具体实现待会再仔细看
             vnode,
             insertedVnodeQueue,
-            // extremely rare edge case: do not insert if old element is in a
-            // leaving transition. Only happens when combining transition +
-            // keep-alive + HOCs. (#4590)
             oldElm._leaveCb ? null : parentElm,
             nodeOps.nextSibling(oldElm)
           );
-          // 现在新的DOM节点被创建出来了，旧的vnode对象也有
-          // 如果新vnode节点有父级，则递归更新父级占位符节点元素
-          if (isDef(vnode.parent)) {
+          // 现在新的DOM节点被创建出来了，递归地更新父级占位符节点元素
+          if (isDef(vnode.parent)) { // 如果新vnode节点有父级
             var ancestor = vnode.parent;
             var patchable = isPatchable(vnode);
-            while (ancestor) {
-              for (var i = 0; i < cbs.destroy.length; ++i) {//遍历cbs.destroy数组，执行里面的每个destroy回调，传入新vnode的父DOM节点
-                cbs.destroy[i](ancestor) //transition ref directives这些模块会destroy
+            while (ancestor) { // 向上遍历父级vnode
+              for (var i = 0; i < cbs.destroy.length; ++i) { //调用父vnode的各个模块但destroy钩子
+                cbs.destroy[i](ancestor)
               }
-              
-              ancestor.elm = vnode.elm; //新vnode的DOM节点赋给父vnode的DOM节点
+              ancestor.elm = vnode.elm; //父vnode的DOM节点设为新vnode的DOM节点
               if (patchable) {
                 for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
                   cbs.create[i$1](emptyNode, ancestor);
                 }
-                // #6513
-                // invoke insert hooks that may have been merged by create hooks.
-                // e.g. for directives that uses the "inserted" hook.
                 var insert = ancestor.data.hook.insert;
                 if (insert.merged) {
-                  // start at index 1 to avoid re-invoking component mounted hook
                   for (var i$2 = 1; i$2 < insert.fns.length; i$2++) {
                     insert.fns[i$2]();
                   }
@@ -5110,17 +5074,16 @@
               ancestor = ancestor.parent;
             }
           }
-
-          // destroy old node
+          // 销毁旧节点，如果旧vnode的父DOM节点存在，则从父节点移除旧节点
           if (isDef(parentElm)) {
-            removeVnodes(parentElm, [oldVnode], 0, 0);
-          } else if (isDef(oldVnode.tag)) {
-            invokeDestroyHook(oldVnode);
+            removeVnodes(parentElm, [oldVnode], 0, 0); // 
+          } else if (isDef(oldVnode.tag)) { //旧的vnode的父节点不存在，且旧vnode有tag属性
+            invokeDestroyHook(oldVnode); //有tag意味着它是元素节点，则销毁旧节点
           }
         }
       }
-      invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch);
-      return vnode.elm
+      invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch)//调用新节点的插入钩子
+      return vnode.elm // patch函数返回vnode的真实DOM元素
     }
   }
 

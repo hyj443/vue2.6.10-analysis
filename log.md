@@ -28,3 +28,27 @@ runtime+compiler 对比 runtime-only
 热水没过牛肉，大火烧20min，小火炖30min，尝尝味道，咸度够不够，不够就加点蚝油（或酱油）
 加入土豆胡萝卜洋葱西红柿（自行选择），再加一点料酒（看看油够不够，不够可以加点油），小火焖至水收的差不多，这个过程大概30min
 焖的过程可以把葱夹出，它煮久了会变酸
+
+
+1 没有新旧vnode
+    直接返回
+2 有旧vnode 没有新vnode
+    销毁旧vnode 再返回
+3 有新vnode
+    3.1 有新vnode 没有旧vnode
+        调用createElm 根据新的vnode创建新的DOM节点
+    3.2 有新vnode 有旧vnode
+        3.2.1 旧vnode挂在真实DOM元素，且可复用
+            调用patchVnode比较新旧vnode 更新DOM
+        3.2.2 旧vnode挂在真实DOM元素，但不能复用
+            旧vnode没有利用价值，生成空vnode节点覆盖旧vnode
+    
+我们看看这段代码都做了哪些事情：
+
+复用 vnode（如果存在 elem 属性）
+处理异步组件
+处理静态节点
+执行 prepatch（如果存在 data 属性）
+执行 update（如果存在 data 属性）
+比较 oldVnode 和 vnode 两个节点
+执行 postpatch（如果存在 data 属性）

@@ -778,7 +778,7 @@
         )
       }
       // 当父子选项同时存在，返回一个函数，函数里面返回了mergeData函数的执行结果
-      // strats.data策略函数在处理子组件的data选项时，调用mergeDataOrFn函数在处理子组件选项时返回的总是一个函数，这也间接导致strats.data策略函数在处理子组件选项时返回的也总是一个函数。
+      // data策略函数在处理子组件的data选项时，调用mergeDataOrFn函数在处理子组件选项时返回的总是一个函数，这也间接导致strats.data策略函数在处理子组件选项时返回的也总是一个函数。
     } else { // 处理非子组件选项的情况，即使用new创建实例时，策略函数是mergedInstanceDataFn函数，再次说明了一个问题：mergeDataOrFn函数永远返回一个函数
       return function mergedInstanceDataFn () {
         // instance merge
@@ -866,18 +866,55 @@
     strats[hook] = mergeHook
   })
 
-  // components/directives/filters的合并策略，策略函数都是mergeAssets
+  // 配置项components/directives/filters的合并策略，策略函数都是mergeAssets
   ASSET_TYPES.forEach(function (type) {
     strats[type + 's'] = function mergeAssets(parentVal, childVal, vm, key) {
-      var res = Object.create(parentVal || null); //创建res对象，如果parent options中有这个选项，则让res的__proto__指向parentVal
-      if (childVal) { // 如果child options中有这个选项，先判断它是不是纯对象，如果不是就报警
+      var res = Object.create(parentVal || null) // 以parentVal为原型对象创建空对象res
+      // 然后判断是否有`childVal`，如果有的话使用`extend` 函数将`childVal` 上的属性混合到`res` 对象上并返回。如果没有`childVal` 则直接返回`res`。
+      if (childVal) { // 如果childValoptions中有这个选项，先判断它是不是纯对象，如果不是就报警
         assertObjectType(key, childVal, vm);
         return extend(res, childVal) //把它们拷贝到ret对象上，此时即使parentVAL存在，也是放在res的原型上
-      } else { // 如果child options中没有这个选项，直接返回res
+      } else { // 如果没有childVal，则直接返回res对象
         return res
       }
-    };
-  });
+    }
+  })
+  /*在任何组件的模板中都可以直接使用<transition/>组件或<keep-alive/>组件，并不需要在组件实例的components选项中显式地注册，为什么可以这样，答案就在mergeAssets函数中
+    var v = new Vue({
+      el: '#app',
+      components: {
+        ChildComponent
+      }
+    })
+    实例化Vue时调用_init，这个根Vue实例不是组件，调用mergeOptions方法，参数parent和child分别接收Vue.options和当前options，在mergeOptions函数中，会对parent和child的每个属性执行mergeField，执行options[key] = strat(parent[key], child[key], vm, key)，strat在这里是函数mergeAssets，合并策略函数，将合并好的值赋给options[key]，在这里key是components，child是当前这个配置对象，child[key]就是{ ChildComponent }
+    即mergeAssets接收的childVal是{ ChildComponent }，parentVal就是Vue.options.components
+    Vue.options是下面这样：
+    Vue.options = {
+      components: {
+        KeepAlive,
+        Transition,
+        TransitionGroup
+      },
+      directives: Object.create(null),
+      directives:{
+        model,
+        show
+      },
+      filters: Object.create(null),
+      _base: Vue
+    }
+    所以parentVal是包含三个内置组件的对象：{KeepAlive, Transition, TransitionGroup}
+    let res = Object.create(parentVal || null)之后，通过res.KeepAlive就能访问到原型上的KeepAlive对象，
+    然后再经过return extend(res, childVal)之后，res对象添加了ChildComponent属性
+    最终res如下：
+    {
+      ChildComponent,
+      __proto__: { KeepAlive, Transition, TransitionGroup }
+    }
+    所以经过策略函数的处理后，合并后的options的components对象，能通过原型链引用到3个内置组件，这就是我们不用显式地注册内置组件的原因，同时这也是内置组件的实现方式，
+    最后别忘了这句是啥意思 assertObjectType(key, childVal, vm)，它是检测childVal是不是一个纯对象，因为注册组件components选项要传一个对象，如果不是纯对象，会警告。
+    我们拿components讲解，对于directives和filters的合并也是一样的，都是用mergeAssets进行合并处理。
+  */
 
   strats.watch = function (parentVal, childVal, vm, key) {
     // work around Firefox's Object.prototype.watch...
@@ -922,10 +959,10 @@
 
   function validateComponentName(name) {
     if (!new RegExp(("^[a-zA-Z][\\-\\.0-9_" + unicodeRegExp.source + "]*$")).test(name)) {
-      warn('无效的组件名字:' + name + '组件名字应符合HTML5规范中的有效自定义元素名');
+      warn('无效的组件名字:' + name + '组件名应符合HTML5规范中的有效自定义元素名')
     }
     if (isBuiltInTag(name) || config.isReservedTag(name)) {
-      warn('不能使用内置的标签名（slot/component）或者HTML保留的标签名' + 'id: ' + name);
+      warn('不能使用内置的标签名(slot/component)和HTML保留的标签名' + 'id: ' + name);
     }
   }
 
@@ -993,9 +1030,9 @@
       warn(`无效的option value"${name}": 期待是一个对象, 但你传了${toRawType(value)}.`, vm)
     }
   }
-
-  // options的合并，这个函数在实例化Vue(调用的_init中)和继承(Vue.extend)时都用到
-  function mergeOptions(parent, child, vm) { //parent代表当前实例的构造函数的options，child代表实例化时传入的options，vm当前实例。mergeoptions方法是要合并构造函数和传入的options这两个对象。
+// /以上面的例1为例,Vue.component()注册组件的时候会调用Vue.extend()生成一个Vue基础构造器，内部会调用mergeOptions函数合并属性， mergeOptions又会调用normalizeProps对props的属性进行一些规范化的修饰，如下:
+  // options的合并，在new Vue时调用了_init函数，_init内部调用mergeOptions对选项进行合并；注册组件时，和继承(Vue.extend)时都用到
+  function mergeOptions (parent, child, vm) { //parent代表当前实例的构造函数的options，child代表实例化时传入的options，vm当前实例。mergeoptions方法是要合并构造函数和传入的options这两个对象。
     for (var key in child.components) {//如果child的options有components
       validateComponentName(key); // 验证传入的组件名是否符合要求
     }
@@ -2364,9 +2401,15 @@
     var vnode = new VNode(
       `vue-component-${Ctor.cid}${name ? `-${name}` : ''}`,
       data, undefined, undefined, undefined, context,
-      { Ctor, propsData, listeners, tag, children },
+      {
+        Ctor,
+        propsData,
+        listeners,
+        tag,
+        children
+      },
       asyncFactory
-    );
+    )
     return vnode
   }
 
@@ -3852,92 +3895,105 @@
     }
   }
 
-  // 使用基础Vue构造器，创建一个“子类”。参数是一个包含组件选项的对象。data选项在Vue.extend()中必须是函数
+  // 定义Vue.extend方法，用来创建一个Vue的子类。
   function initExtend(Vue) {
-    Vue.cid = 0;
-    var cid = 1; // 每个实例的构造函数(包括Vue)都有唯一的cid。
-    Vue.extend = function (extendOptions) { // 接受扩展选项对象
-      extendOptions = extendOptions || {};  // extendOptions若没传则设为空对象
-      var Super = this; // Super指向父类
-      var SuperId = Super.cid; // 父类的cid
-      var cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {});
-      // 定义缓存构造器对象，如果扩展选项的_Ctor属性未定义，则赋值空对象
-      // 如果缓存构造器对象中已有该构造器，则直接返回它
-      if (cachedCtors[SuperId]) {
+    Vue.cid = 0; // Vue构造函数的cid为0
+    var cid = 1; // 每个实例的构造函数(包括Vue)都有唯一的cid
+    Vue.extend = function (extendOptions = {}) { //Vue.extend接收一个选项对象
+      //Sub.extend=Super.extend，即extend是每个构造器都有的方法，它里面的this指向调用它的构造器
+      var Super = this; // Super指向调用extend的构造器，可以理解为父类
+      var SuperId = Super.cid // 父类的cid
+      var cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {})
+      //扩展选项对象的_Ctor属性是一个专门缓存构造器的对象，避免重复创建子构造器
+      if (cachedCtors[SuperId]) {// 如果缓存构造器对象中已存在该构造器，直接返回它
         return cachedCtors[SuperId]
       }
-      // 获取扩展配置对象的name属性或父级配置对象name属性
-      var name = extendOptions.name || Super.options.name;
-      if (name) { // 验证name是否合法并给出警告
-        validateComponentName(name);
+      var name = extendOptions.name || Super.options.name //获取扩展选项对象的name属性值，如果没有，获取父级选项对象的name属性值，组件其实就是一个构造函数，name属性就是组件名
+      if (name) validateComponentName(name) // name存在，校验name是否是合法的组件名
+      var Sub = function (options) {// 创建子类构造函数Sub
+        this._init(options); // Sub实例化时this指向Sub实例，调用Vue的原型方法_init进行初始化
       }
-      //定义子类构造函数
-      var Sub = function (options) {
-        this._init(options); // this指向Sub实例
-      };
-      Sub.prototype = Object.create(Super.prototype);//创建一个新对象，使用Super.prototype来作为新对象的原型对象，这个新对象除了__proto__没有别的属性，__proto__值为Super.prototype
-      // Super.prototype.__proto__ === Super.prototype。即Sub的原型通过__proto__指向父类的原型。
-      Sub.prototype.constructor = Sub; // Sub的原型除了__proto__没有别的属性，没有constructor属性
-      // 增加Sub.prototype的constructor属性，指向Sub本身。实现了子类Sub继承父类Super
+      // 定义了子构造函数Sub后，我们要让它继承父类(包括Vue)
+      Sub.prototype = Object.create(Super.prototype);//创建一个新对象，指定它的原型对象是Super.prototype，于是这个对象除了__proto__没有别的属性，__proto__值为Super.prototype。这个对象赋给Sub.prototype，即Super.prototype.__proto__===Super.prototype，即Sub的原型通过__proto__指向父类的原型
+      Sub.prototype.constructor = Sub; // Sub的原型是Object.create创建的这个对象，它除了__proto__没有别的属性，即没有constructor属性，但作为构造函数的prototype，它应该有一个constructor属性，指向构造函数本身Sub，两步操作就实现了子类Sub继承父类Super
       Sub.cid = cid++; // 给子类添加cid属性
-      Sub.options = mergeOptions(Super.options, extendOptions);
-      // 给子类添加options属性，值为合并父类options和extend接收的扩展选项对象
-      Sub['super'] = Super; // 给Sub这个子类添加super属性，值为父类
-      // 如果子类的options有props对象，遍历这个对象，让子类的prototype的_props代理下来
-      var props = Sub.options.props;
-      if (props) {
+      Sub.options = mergeOptions(Super.options, extendOptions) // 给子类添加options属性，就像Vue.options一样，但它的options值是合并了父类options和extend接收的扩展选项对象的
+      Sub['super'] = Super; // 给子类Sub添加super属性，值为父类
+      var props = Sub.options.props // 获取子类的options的props
+      if (props) { // 如果有props对象，遍历props对象，交给子类的原型的_props属性代理
         for (var key in props) {
-          proxy(Sub.prototype, "_props", key);
+          proxy(Sub.prototype, "_props", key) //子类的实例.prop名 就能访问prop的值
         }
       }
-      // 如果子类的options有computed对象，遍历对象，在子类的prototype上定义计算属性
-      var computed = Sub.options.computed;
-      if (computed) {
+      var computed = Sub.options.computed; // 获取获取子类的options的computed对象
+      if (computed) { // 存在，则遍历computed对象，将计算属性定义在子类的原型上
         for (var key in computed) {
           defineComputed(Sub.prototype, key, computed[key]);
         }
-      } // 上面两个操作避免了每次创建子类的实例时，都要定义props和定义计算属性，把它们定义到子类的原型上，子类的实例就能取原型上的值。
-      // 给子类添加extend等方法，赋予子类和父类一样的扩展、混入、使用插件的能力
-      Sub.extend = Super.extend;
-      Sub.mixin = Super.mixin;
+      }
+      // 之所以将props和计算属性定义在子类Sub的原型上，是为了避免每次创建子类的实例时，都要定义props和计算属性，因为子类的实例可以通过原型链在原型对象上读取相应的值
+      Sub.extend = Super.extend;// 子类也添加父类的extend、mixin、use方法
+      Sub.mixin = Super.mixin; // 这样子类就和父类一样具有扩展、混入、使用插件的能力
       Sub.use = Super.use;
-      // 给子类添加注册或获取全局指令、全局组件、全局过滤器的方法，允许子类有私有资源
-      ASSET_TYPES.forEach(function (type) {
-        Sub[type] = Super[type];
+      ASSET_TYPES.forEach(function (type) {//'component' 'directive' 'filter'
+        Sub[type] = Super[type] // 给子类添加Sub.component等全局方法，允许子类有私有资源
       });
-      // enable recursive self-lookup
-      if (name) {
+      if (name) { // name代表了组件构造函数的组件名，如果存在，将它保存在options的components对象中，对应的值为构造器Sub
         Sub.options.components[name] = Sub;
       }
-      Sub.superOptions = Super.options; //存父类的options
-      Sub.extendOptions = extendOptions; // 存Vue.extend调用时传入的options，即子类新增的options
-      Sub.sealedOptions = extend({}, Sub.options); //Sub.options为合并了父类的和自己的，然后密封一下
-      // 缓存构造函数，把子类Sub添加到缓存器对象中
-      cachedCtors[SuperId] = Sub;
-      return Sub
-    };
+      Sub.superOptions = Super.options; // superOptions存父类的options
+      Sub.extendOptions = extendOptions; // 存extend时传入的选项对象，即子类扩增的options
+      Sub.sealedOptions = extend({}, Sub.options) //Sub.options是合并了父类options的和扩增的options的，通过extend将它拷贝到一个新的对象中，然后把新对象赋给Sub.sealedOptions，存放Sub当前的options
+      cachedCtors[SuperId] = Sub // 最后将创建好的子类Sub在缓冲构造函数对象中记录一下
+      return Sub // extend函数返回出创建出来的子类
+    }
   }
 
-  function initAssetRegisters (Vue) {
-    ASSET_TYPES.forEach(type => {
+  // Vue也允许注册自定义指令。在Vue中代码复用和抽象的主要形式是组件。然而有的情况，你仍然需要对普通DOM元素进行底层操作，这时候就会用到自定义指令。注册或获取全局指令的api是Vue.directive
+  /*Vue.directive('my-directive', {这个叫指令定义对象，提供5个可选钩子
+      bind(){}, //只调用一次，指令第一次绑定到元素时调用，在里面可以进行一次性的初始化设置 
+      inserted(){},//被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)
+      update(){},//所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新
+      componentUpdated(){},//指令所在组件的 VNode 及其子 VNode 全部更新后调用
+      unbind(){} // 只调用一次，指令与元素解绑时调用
+    })
+    如果你想在bind和update时触发相同行为，而且不需要其它钩子，可以这样写:
+    Vue.directive('my-directive', function () {
+      // 这里将会被 `bind` 和 `update` 调用
+    })
+    var myDirective = Vue.directive('my-directive')// 返回已注册的指令
+    */
+ /**注册或获取全局过滤器。Vue.filter(id,[definition])，过滤器用在两个地方：{{}}插值和v-bind的表达式
+  * {{xxx|my-filter}}  <div :id="rawId | formatId"></div>
+    Vue.filter('my-filter', function (value) {
+      // return处理后的值
+    })
+    var myFilter = Vue.filter('my-filter')// 返回已注册的过滤器
+  */
+  // Vue.component('组件名',Vue.extend({/* */})) 注册组件，传入一个扩展过的构造器
+  // Vue.component('组件名',{/* */}) 注册组件，传入一个选项对象(会自动调用Vue.extend)
+  //let myComponent = Vue.component('组件名') 获取你注册的组件，始终返回构造器
+  // 注册组件的原理很简单，只需将组件保存在某个地方即可，Vue.options中添加了components属性，用于存放组件
+  function initAssetRegisters(Vue) {// 注册 Vue.component和Vue.directive和Vue.filter
+    ASSET_TYPES.forEach(function (type) { //遍历['component','directive','filter']
       Vue[type] = function (id, definition) {
-        if (!definition) {
-          return this.options[type + 's'][id]
-        } else {
-          if (process.env.NODE_ENV !== 'production' && type === 'component') {
-            validateComponentName(id)
+        if (!definition) { // 如果definition没传，使用id从this.options.components中读取组件并返回
+          return this.options[type + 's'][id] // 即只传一个参数，代表函数是为了读取组件
+        } else { // 两个参数都传了，说明是注册组件的操作
+          if (type === 'component') {
+            validateComponentName(id) // 对传入的组件名进行校验
           }
-          if (type === 'component' && isPlainObject(definition)) {
-            definition.name = definition.name || id
-            definition = this.options._base.extend(definition)
+          if (type === 'component' && isPlainObject(definition)) { // definition支持两种参数：选项对象和构造器，我们知道组件是一个构造函数，是调用Vue.extend生成的子类，所以如果是对象类型，调用Vue.extend将它变为Vue的子类，即将参数definition统一处理为构造器
+            definition.name = definition.name || id;
+            definition = this.options._base.extend(definition);
           }
-          if (type === 'directive' && typeof definition === 'function') {
-            definition = { bind: definition, update: definition }
+          if (type === 'directive' && typeof definition === 'function') { // definition传的是函数
+            definition = { bind: definition, update: definition } //则默认监听bind和update两个事件，所以将函数分别赋给对象中的bind和update，并且这个对象会覆盖definition。如果definition不是函数，说明是用户自定义的指令对象，不需任何操作，直接将指令对象保存在this.options.directive对象中
           }
-          this.options[type + 's'][id] = definition
-          return definition
+          this.options[type + 's'][id] = definition// 将自定义指令对象/过滤器函数/组件构造器和它对应的组件名存到对象中
+          return definition // 返回 自定义指令对象 / 过滤器函数 / 组件的构造函数
         }
-      }
+      } // 所以注册指令 过滤器 组件 其实就是往Vue.options中对应的属性存值
     })
   }
 
@@ -4067,25 +4123,24 @@
       observe(obj); //observe是Vue内部用来观data数据对象和它的嵌套子对象的
       return obj // 返回的对象可以直接用于渲染函数和计算属性内
     };
-    // const state = Vue.observable({ count: 0 })
-
+    // const state = Vue.observable({count:0}) //state.count就是响应式属性了，它有自己的get和set，当属性被读取时触发get，收集依赖，当属性值被修改时触发set，触发依赖
     // const Demo = {
-    //   render(h) {
+    //   render(h) { // 响应式属性state.count直接用在渲染函数中
     //     return h('button', {
     //       on: { click: () => { state.count++ }}
     //     }, `count is: ${state.count}`)
     //   }
     // }
-    Vue.options = Object.create(null);
-    ASSET_TYPES.forEach(type => { //Vue.options.components,Vue.options.directives,Vue.options.filters
-      Vue.options[type + 's'] = Object.create(null)
+    Vue.options = Object.create(null) // Vue.options初始值为一个空对象
+    ASSET_TYPES.forEach(type => { // 给Vue.options添加components等属性
+      Vue.options[type + 's'] = Object.create(null) // 初始值为空对象
     })
     Vue.options._base = Vue;
     extend(Vue.options.components, builtInComponents); // 将后者对象的属性拷贝到前者
     initUse(Vue); // 注册Vue.use方法
     initMixin$1(Vue); // 添加Vue.mixin方法
     initExtend(Vue); //定义Vue.extend方法
-    initAssetRegisters(Vue); // Vue.component Vue.directive Vue.filter
+    initAssetRegisters(Vue); //定义全局api:Vue.component和Vue.directive和Vue.filter
   }
   initGlobalAPI(Vue);
 

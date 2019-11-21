@@ -2,14 +2,14 @@
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() : typeof define === 'function' && define.amd ? define(factory) : (global = global || self, global.Vue = factory());
 }(this, function () { 'use strict';
-  var emptyObject = Object.freeze({}); // 一个空的冻结对象：不可扩展，不可配置，不可写
+  const emptyObject = Object.freeze({}); // 一个空的冻结对象：不可扩展，不可配置，不可写
   const isUndef = v => v === undefined || v === null // 是否为未定义，null也认为是未定义
   const isDef = v => v !== undefined && v !== null // 是否有定义，null认为是未定义
   const isTrue = v => v === true
   const isFalse = v => v === false
-  const isPrimitive = v => typeof v === 'string' || typeof v === 'number' || typeof v === 'symbol' || typeof v === 'boolean'
+  const isPrimitive = v => typeof v==='string'||typeof v==='number'||typeof v==='symbol'||typeof v ==='boolean'
   const isObject = obj => obj !== null && typeof obj === 'object' // 快速对象检查，用于区分对象和原始值
-  var _toString = Object.prototype.toString;
+  const _toString = Object.prototype.toString;
   const toRawType = v => _toString.call(v).slice(8, -1) // 比如[object Object]的Object
   const isPlainObject = obj => _toString.call(obj) === '[object Object]' // 严格的纯对象检查
   const isRegExp = v => _toString.call(v) === '[object RegExp]' // 是否是正则对象
@@ -18,72 +18,59 @@
     return n >= 0 && Math.floor(n) === n && isFinite(val)
   }
   const isPromise = v => isDef(v) && typeof v.then === 'function' && typeof v.catch === 'function'
-  /**将值转换为实际呈现的字符串。JSON.stringify 将一个值转换为一个JSON字符串，三个参数
-    * @param value 待转换的值，通常是对象或数组
-    * @param replacer 转换函数，如果提供了一个函数，则每个属性都会经过该函数的处理，如果是一个数组，则只有包含在数组中的属性名才会被转化到最终的JSON字符串中，如果是null或没传，则对象的所有属性都会被转化
-    * @param space 增加 缩进, 空格，换行符，使得JSON字符串显得更容易读，美化输出
-   */
-  const toString = v => v == null ?
-    '' :
-    Array.isArray(v) || (isPlainObject(v) && v.toString === _toString) ?
-    JSON.stringify(v, null, 2) :
-    String(v)
-  // 转数字，转失败就返回原本值
-  function toNumber(val) {
-    var n = parseFloat(val);
-    return isNaN(n) ? val : n
+  const toString = v => v == null ? // 如果值==null 转成字符串就是''
+  '' : Array.isArray(v) || (isPlainObject(v) && v.toString === _toString) ?
+  JSON.stringify(v, null, 2) : String(v) // 是数组或对象就调用JSON.stringify，否则直接String
+  // JSON.stringify将一个值转换为一个JSON字符串，接收三个参数，待转换的值，通常是数组或对象；转换函数，如果传了函数则对象的每个属性都经过它的处理，如果传了一个数组，则只有包含在数组里的属性名才会被转化到最终的JSON字符串中，如果传null或没传，则对象的所有属性都会被转化，最后一个参数是缩进格数，美化输出
+  function toNumber(v) { // 转数字，转失败就返回原本值
+    var n = parseFloat(v);
+    return isNaN(n) ? v : n
   }
-  // 在函数作用域中定义一个对象map，是根据字符串split生成的，然后定义一个函数并返回，内层函数引用了函数外层作用域内的变量map，形成了闭包，map对象并不会随着makeMap执行完毕而销毁，会继续留在内存空间。返回的函数，接收值val，用来检测这个val是否存在对象map中
-  // 这种函数本来要传3个参数，但通过闭包实现函数柯里化，使得传入的参数减少（分两次传入了）
+  // 在函数作用域中定义一个对象map，记录str拆分成数组的每一项，然后定义一个新的函数并返回，内层函数引用makeMap作用域内的变量map，形成了闭包，map对象并不会随着makeMap执行完毕而销毁，会继续留在内存空间。返回的新函数接收一个值，用来检测它是否存在对象map中。这个函数其实功能就一个：检查val是否是指定集合中的一员，因为函数要经常调用，不希望每次调用都创建一个map对象，所以通过闭包实现makeMap执行一次之后，map对象驻留在内存中；而且函数柯里化了，本来要传3个参数，选择参数分两次传入
   function makeMap(str, expectsLowerCase) {
     var map = Object.create(null);
     str.split(',').forEach(item => {
       map[item] = true
     })
-    return expectsLowerCase ? val => map[val.toLowerCase()] : val => map[val]
+    return expectsLowerCase ?
+      val => map[val.toLowerCase()] :
+      val => map[val]
   }
-  // 一个函数，检查是否是内置的标签名
-  var isBuiltInTag = makeMap('slot,component', true);
-  // 检查一个属性是否是保留属性
-  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is');
-  // 从数组中移除一项
-  function remove(arr, item) {
+  var isBuiltInTag = makeMap('slot,component', true)// 函数检查是否是内置的标签名
+  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is')// 检查给定字符串是否是保留属性
+  function remove(arr, item) { // 从数组中移除指定的元素，移除成功则返回被移除的项，否则无返回值
     if (arr.length) {
       var index = arr.indexOf(item);
       if (index > -1) {
-        return arr.splice(index, 1)
+        return arr.splice(index, 1) 
       }
     }
   }
-  // 检查一个对象是否有这个自有属性
-  var hasOwnProperty = Object.prototype.hasOwnProperty;
-  const hasOwn = (obj, key) => hasOwnProperty.call(obj, key)
-  // 函数的柯里化，cached函数传入fn，执行返回一个新函数，新函数接收参数str，并通过闭包引用外层函数（cached）作用域的cache对象，cache里存放的是缓存的值
-  // 新函数中，优先读取并返回cache对象中的缓存，如果没有对应的缓存值，则调用fn执行一次，把结果返回。因此cached(fn)接收相同的str就不用每次都执行fn
+  let hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key) //检查对象是否有自有属性key
+  // cached函数传入fn，执行返回一个新函数，新函数接收参数str，并通过闭包引用外层函数cached作用域的cache对象，cache里存放的是缓存的值
+  // 新函数中，根据传入的str优先获取并返回cache对象中的缓存，如果没有对应的缓存值，则调用fn执行一次，把结果保存到缓存对象中并返回。因此cached(fn)这个函数接收相同的str就不用每次都执行fn
   function cached(fn) {
     var cache = Object.create(null)
-    return (function cachedFn(str) {
+    return str => {
       var hit = cache[str]
       return hit || (cache[str] = fn(str))
-    })
+    }
   }
-  // cached并不改变原函数的行为，只是通过缓存来避免重复求值。举个例子，camelize函数，传字符串aaa-bbb，始终得到aaaBbb，不会有别的结果，在一个庞大的应用中，可能要转译很多相同的字符串，我们只需从缓存中读取即可，不用每次都执行函数，这就是cached的目的
+  // cached并不改变原函数的行为，只是通过缓存来避免重复求值。比如，camelize函数，传入'aaa-bbb'，始终返回'aaaBbb'，一个项目中可能要camelize多次同一个字符串，只需从缓存中读取即可，不用每次都执行函数
+  var camelizeRE = /-(\w)/g // 匹配-和-后的一个字符(字母/数字/_)
   // 连字符转驼峰
-  var camelizeRE = /-(\w)/g; // -和-后的一个字符（字母/数字/_）
   var camelize = cached(str => str.replace(camelizeRE, (_, c) => c ? c.toUpperCase() : ''))
-  
-  // replace()方法返回一个由替换值（replacement）替换一些或所有匹配的模式（pattern）后的新字符串。模式可以是一个字符串或者一个正则表达式，替换值可以是一个字符串或者一个每次匹配都要调用的回调函数。原字符串不会改变。
+  // replace方法返回一个用替换值替换一些或所有匹配的模式后的新字符串。模式可以是一个字符串或者一个正则表达式，替换值可以是一个字符串或者一个每次匹配都要调用的回调函数。原字符串不会改变。
   /** str.replace(reg, ($0, $1, $2, $3) => { })
       $0: 正则匹配到的字符串
       $1: 在使用组匹配时，组匹配到的值
       $2: 匹配值在原字符串中的索引
       $3: 原字符串 */
-  // 首字母大写
-  var capitalize = cached(str => str.charAt(0).toUpperCase() + str.slice(1));
+  var capitalize = cached(str => str.charAt(0).toUpperCase() + str.slice(1)) // 首字母大写
   // 驼峰转连字符加小写  aaaBBB aaa-bbb
-  var hyphenateRE = /\B([A-Z])/g; // \b 单词边界 \B 非单词边界
-  var hyphenate = cached((str) => str.replace(hyphenateRE, '-$1').toLowerCase());
-  // str 匹配出非单词边界的大写的字母 也就是aaaBBB的BBB，替换成 '-$1' $n代表第n个()匹配到的内容，也就是 BBB，所以变成 aaa-BBB，然后再转小写 aaa-bbb
+  var hyphenateRE = /\B([A-Z])/g // \b单词边界 \B非单词边界。匹配出非单词边界的大写字母
+  var hyphenate = cached(str   => str.replace(hyphenateRE, '-$1').toLowerCase())
+  // abcDef的话匹配字符D，替换成'-$1'。$n代表括号匹配到的内容，也就是D，所以变成abc-Def，再转小写abc-def
   function polyfillBind(fn, ctx) {
     function boundFn(a) {
       return arguments.length ?
@@ -97,8 +84,7 @@
   }
   const nativeBind = (fn, ctx) => fn.bind(ctx)
   var bind = Function.prototype.bind ? nativeBind : polyfillBind;
-  // function toArray (list, start) {
-  //   start = start || 0;
+  // function toArray (list, start = 0) {
   //   var i = list.length - start;
   //   var ret = new Array(i);
   //   while (i--) {
@@ -106,10 +92,8 @@
   //   }
   //   return ret
   // }
-  // 类数组转为真数组
-  const toArray = (arrayLike, start = 0) => [...arrayLike].slice(start)
-  // 将对象b的属性扩展到对象a上
-  function extend(a, b) {
+  const toArray = (arrayLike, start = 0) => [...arrayLike].slice(start)// 类数组转为真数组
+  function extend(a, b) { // 将对象b的属性扩展到对象a上
     for (var key in b) {
       a[key] = b[key];
     }
@@ -128,7 +112,7 @@
   function noop () {}
   var no = () => false;
   var identity = a => a;
-  // 检查两个值是否松散相等 :如果他们是纯对象，他们是否有相同的 "结构" structure
+  // 检查两个值是否松散相等 :如果他们是纯对象，他们是否有相同的"结构"
   function looseEqual(a, b) {
     if (a === b) return true 
     var isObjectA = isObject(a);
@@ -157,26 +141,24 @@
       return false
     }
   }
-  // 在数组中找到和目标val松散相等的元素的索引，找不到返回-1。区别于indexOf，用的是"严格相等"
-  function looseIndexOf (arr, val) {
+  function looseIndexOf (arr, val) { //寻找数组中和目标val松散相等的元素的索引
     arr.forEach((item, index) => {
-      if (looseEqual(item, val)) return index
+      if (looseEqual(item, val)) return index // looseIndexOf区别于indexOf，后者用的===
     })
-    return -1
+    return -1 // 没找到则返回-1
   }
-  // 只被调用一次的函数，也是用到函数的柯里化
+  //如果你想fn只被调用一次，则once(fn)返回的函数就是
   function once (fn) {
-    var called = false; // 闭包实现了一个持久性的标志位
+    var called = false; // 闭包实现了一个持久性的标识
     return function (...args) {
-      if (!called) {
+      if (!called) { // fn执行了一次后，called从此变为真，并且是持久的，fn不能被调用了
         called = true;
         fn.apply(this, args);
       }
     }
   }
   var SSR_ATTR = 'data-server-rendered';
-  var ASSET_TYPES = ['component', 'directive', 'filter'];
-  // 由生命周期函数同名的字符串组成的数组
+  var ASSET_TYPES = ['component', 'directive', 'filter']
   var LIFECYCLE_HOOKS = ['beforeCreate', 'created', 'beforeMount', 'mounted', 'beforeUpdate', 'updated', 'beforeDestroy', 'destroyed', 'activated', 'deactivated', 'errorCaptured', 'serverPrefetch'];
 
   var config = {
@@ -200,19 +182,16 @@
   };
 
   var unicodeRegExp = /a-zA-Z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C-\u200D\u203F-\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD/;
-
-  // 一个字符串是否以 $ or _ 开头（是否是保留关键字）
-  function isReservedKeyword(str) {
-    var c = (str + '').charCodeAt(0);
+  function isReservedKeyword(str) { // 判断传入的字符串是否以$或_开头，即是否是保留关键字
+    var c = (str + '').charCodeAt(0)
     return c === 0x24 || c === 0x5F
   }
-  // 定义一个可配置可写的属性，是否可枚举由你决定（是否传第四个参数）
-  function def (obj, key, val, enumerable) { // 是对Object.defineProperty的一层简单封装
-    Object.defineProperty(obj, key, {
-      value: val,
-      enumerable: !!enumerable,
-      writable: true,
-      configurable: true
+  function def (obj, key, val, enumerable) { // 一般用来定义不可枚举属性
+    Object.defineProperty(obj, key, { //def是对Object.defineProperty的封装
+      value: val, //定义一个
+      enumerable: !!enumerable, // 是否可枚举def的传参
+      writable: true,//可写
+      configurable: true //可配置
     });
   }
   var bailRE = new RegExp(("[^" + (unicodeRegExp.source) + ".$_\\d]"));
@@ -251,7 +230,7 @@
       }));
       window.addEventListener('test-passive', null, opts);
       //EventTarget.addEventListener将指定的监听器注册到EventTarget上，当该对象触发指定的事件时，指定的回调函数就会被执行。事件目标可以是一个文档上的元素Element,Document和Window或者任何其他支持事件的对象(比如XMLHttpRequest)
-      // target.addEventListener(type, listener[, options]);type表示监听事件类型的字符串。listener是当事件触发时，会接收到一个事件通知（实现了Event接口的对象）对象。listener必须是一个实现了EventListener接口的对象，或者是一个函数。有关回调本身的详细信息，请参阅The event listener callback 
+      // target.addEventListener(type, listener[, options]);type表示监听事件类型的字符串。listener是当事件触发时，会接收到一个事件通知（实现了Event接口的对象）对象。listener必须是一个实现了EventListener接口的对象，或者是一个函数。
       // options 一个指定有关 listener 属性的可选参数对象。可用的选项如下：
       // capture:  Boolean，表示 listener 会在该类型的事件捕获阶段传播到该 EventTarget 时触发。
       // once:  Boolean，表示 listener 在添加之后最多只调用一次。如果是 true， listener 会在其被调用之后自动移除。
@@ -965,27 +944,26 @@
       warn('不能使用内置的标签名(slot/component)和HTML保留的标签名' + 'id: ' + name);
     }
   }
-
-  // 合并选项mergeOptions时会对props归一化规范化，数组格式的props将被规范化成对象格式
+  // 合并选项时会对props归一化规范化，数组形式将被规范化成对象形式
   function normalizeProps (options, vm) {
     var props = options.props;
     if (!props) return // 传入的options中没有props，直接返回
-    var res = {}; // 存放规范化后的结果
+    var res = {} // res对象存放规范化后的结果
     var val, name;
     if (Array.isArray(props)) { // 如果props是数组
       props.forEach(prop => { // 遍历props数组
         if (typeof prop ==='string') {
-          name = camelize(prop) // 父组件中：<child one-num="123"></child>，那么子组件的props选项必须用oneNum接收，props: ['oneNum']
-          res[name] = { type: null } //数组的每一项作为res对象的key，value为{type: null}
+          name = camelize(prop) // 如果父组件的模板中使用子组件：<child one-num="123"></child>，那么子组件的props选项必须用oneNum接收，props: ['oneNum']，所以要将prop名驼峰化
+          res[name] = { type: null } // res对象中，prop名作为key，value是{type: null}
         } else {
           warn('你用数组写法传props，那它里面的元素必须是字符串')
         }
       })
-    } else if (isPlainObject(props)) { // 不是数组则判断是否是纯对象
-      for (var key in props) { // 遍历props对象，先把对象的key转成驼峰形式，再判断val，如果是val是纯对象，直接把val和对应的key添加到res，如果不是纯对象，val为{ type: val }
-        val = props[key];
-        name = camelize(key);
-        res[name] = isPlainObject(val) ? val : { type: val }
+    } else if (isPlainObject(props)) { // 看看props是否是纯对象
+      for (var key in props) { // 遍历props对象，
+        val = props[key] //res对象中prop名对应的值val
+        name = camelize(key)//把每一个prop名转成驼峰形式
+        res[name] = isPlainObject(val) ? val : { type: val } //如果val是纯对象，直接把name和val作为键值对添加到res对象，否则，默认val是类型，val设为{type: val}再添加到res对象
       }
     } else {
       warn("无效的props选项的值，传数组或对象，你传的是" + toRawType(props), vm)
@@ -1015,12 +993,11 @@
 
   function normalizeDirectives (options) {
     var dirs = options.directives;
-    if (dirs) {
-      for (var key in dirs) {
-        var def$$1 = dirs[key];
-        if (typeof def$$1 === 'function') {
-          dirs[key] = { bind: def$$1, update: def$$1 };
-        }
+    if (!dirs) return // options不存在directives就直接返回
+    for (const key in dirs) {
+      const def = dirs[key] // 正常来说def就是定义指令的对象
+      if (typeof def === 'function') { // 如果def是函数就将它绑定给bind和update
+        dirs[key] = { bind: def, update: def };
       }
     }
   }
@@ -1030,11 +1007,10 @@
       warn(`无效的option value"${name}": 期待是一个对象, 但你传了${toRawType(value)}.`, vm)
     }
   }
-// /以上面的例1为例,Vue.component()注册组件的时候会调用Vue.extend()生成一个Vue基础构造器，内部会调用mergeOptions函数合并属性， mergeOptions又会调用normalizeProps对props的属性进行一些规范化的修饰，如下:
-  // options的合并，在new Vue时调用了_init函数，_init内部调用mergeOptions对选项进行合并；注册组件时，和继承(Vue.extend)时都用到
+  // options的合并，在new Vue时调用了_init函数，_init内部调用mergeOptions将Vue.options和配置对象进行合并；Vue.mixin和子类的mixin中也用到了；Vue.extend和子类的extend中也用到了，合并父类options和扩展配置对象
   function mergeOptions (parent, child, vm) { //parent代表当前实例的构造函数的options，child代表实例化时传入的options，vm当前实例。mergeoptions方法是要合并构造函数和传入的options这两个对象。
-    for (var key in child.components) {//如果child的options有components
-      validateComponentName(key); // 验证传入的组件名是否符合要求
+    for (var key in child.components) {// 如果child选项对象中有components
+      validateComponentName(key); // 校验components中注册的组件名是否合法
     }
     if (typeof child === 'function') { //如果child是函数，取其options作为child
       child = child.options;
@@ -1043,39 +1019,38 @@
     normalizeInject(child, vm);
     normalizeDirectives(child);
     if (!child._base) { // child._base为假，说明child不是Vue.options
-      // 允许声明扩展另一个组件(可以是一个简单的选项对象或构造函数)，而无需使用Vue.extend。这主要是为了便于扩展单文件组件。这和mixins 类似。
+      // extends选项 允许声明扩展一个组件，可以传选项对象或构造函数，无需调用Vue.extend，主要是为了便于扩展简单文件组件，这和mixins类似
       // var CompA = { ... }
       // var CompB = {
-      //   extends: CompA,// 在没有调用 `Vue.extend` 时候继承 CompA
+      //   extends: CompA,// 没有调用Vue.extend却继承 CompA
       //   ...
       // }
-      if (child.extends) { //如果传入的child这个options有extends，也就是这个child子类继承了extends所代表的类，那么就应该将extends里的内容合并到实例的构造函数的options上（即parent的options上）
+      if (child.extends) { //如果child这个options传了extends选项，应该将extends的内容合并到实例的构造函数的options上(即parent的options)
         parent = mergeOptions(parent, child.extends, vm);
       }
-      if (child.mixins) { //如果传入的child这个options有mixins，遍历mixins数组，将每个mixin的options合并到实例的构造函数的options上（即parent的options上）
+      if (child.mixins) { //如果child这个options传了mixins选项，遍历mixins数组，将每个mixin选项对象合并到实例的构造函数的options上(即parent的options)
         child.mixins.forEach(childMixin => {
           parent = mergeOptions(parent, childMixin, vm);
         })
       }
     }
-    // 经过上面，parent很可能已经变化，是经过合并后产生的新对象，上面做的都是对parent和child的预处理
-    function mergeField (key) {
-      var strat = strats[key] || defaultStrat;
-      options[key] = strat(parent[key], child[key], vm, key);
-    }
+    // 因为mergeOptions返回的是新的对象，上面可能调用了mergeOptions，所以经过上面代码，parent可能已经不是原来的parent，而是经过合并后产生的新对象，上面做的都是对parent和child的预处理
     var options = {}; // 最后要返回的对象
     var key;
-    for (key in parent) {
-      mergeField(key);
+    for (key in parent) { // 遍历parent
+      mergeField(key) // 将parent的key传入mergeField执行
     }
-    for (key in child) {
-      if (!hasOwn(parent, key)) { // 如果child对象的key也在parent上出现，那就不用调用了
+    for (key in child) { // 遍历child对象，多了个判断
+      if (!hasOwn(parent, key)) { //如果child对象的key也在parent上出现，那就不用再调用mergeField了，因为上一个forin循环中已经调用过了
         mergeField(key);
       }
     }
+    function mergeField (key) { // 调用对应的策略函数合并某个字段key的选项
+      var strat = strats[key] || defaultStrat //strats是config.optionMergeStrategies合并选项的策略对象，这个对象内包含很多合并特定选项的策略函数，不同的选项使用不同的合并策略
+      options[key] = strat(parent[key], child[key], vm, key) //调用策略函数对parent和child的key进行合并，返回值赋给options[key]
+    }
     return options
   }
-
 
   function resolveAsset(options, type, id, warnMissing) {
     if (typeof id !== 'string') return
@@ -4120,7 +4095,7 @@
     Vue.delete = del;
     Vue.nextTick = nextTick;
     Vue.observable = (obj) => {// 把一个对象转成响应式对象，并且会在发生改变时触发相应的更新。也可以作为最小化的跨组件状态存储器，用于简单的场景：
-      observe(obj); //observe是Vue内部用来观data数据对象和它的嵌套子对象的
+      observe(obj); //observe是Vue内部用来观测data对象和它的嵌套子对象的
       return obj // 返回的对象可以直接用于渲染函数和计算属性内
     };
     // const state = Vue.observable({count:0}) //state.count就是响应式属性了，它有自己的get和set，当属性被读取时触发get，收集依赖，当属性值被修改时触发set，触发依赖
@@ -4128,7 +4103,7 @@
     //   render(h) { // 响应式属性state.count直接用在渲染函数中
     //     return h('button', {
     //       on: { click: () => { state.count++ }}
-    //     }, `count is: ${state.count}`)
+    //     }, `count is: ${state.count}`
     //   }
     // }
     Vue.options = Object.create(null) // Vue.options初始值为一个空对象
@@ -4143,7 +4118,6 @@
     initAssetRegisters(Vue); //定义全局api:Vue.component和Vue.directive和Vue.filter
   }
   initGlobalAPI(Vue);
-
   Object.defineProperty(Vue.prototype, '$isServer', {
     get: isServerRendering
   });

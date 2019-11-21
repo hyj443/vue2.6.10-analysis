@@ -82,7 +82,7 @@
 // let a = 'v-model:dddd.feg'.match(argRE)[1]
 // a ='model:dddd.feg'.slice(0, -(a.length + 1))
 // console.log(a)
- 
+
 // 我们知道了模板上的事件标记在构建AST树上是怎么处理，还有如何根据构建的AST树返回正确的渲染函数，但是真正事件绑定离不开绑定注册事件。这个阶段发生在组件挂载的阶段。有了渲染函数就可以生成实例挂载需要的Vnode树，并且会进行patchVnode的环节进行真实节点的构建。有了Vnode，接下来会遍历子节点递归调用createElm为每个子节点创建真实的DOM，由于Vnode中有data属性，在创建真实DOM时会进行注册相关钩子的过程，其中一个就是注册事件相关处理。
 
 
@@ -90,4 +90,17 @@
 
 
 // valid为假，警告开发者所传的prop值的类型不符合预期。打印expectedTypes数组中的类型字符串告诉开发者该prop所期望的类型。同时通过toRawType 函数获取真正的 prop 值的类型并提示
-  
+function cached(fn) {
+  var cache = Object.create(null)
+  return str => {
+    var hit = cache[str]
+    return hit || (cache[str] = fn(str))
+  }
+}
+var hyphenateRE = /\B([A-Z])/g;
+
+var hyphenate = cached(str => str.replace(hyphenateRE, '-$1'))
+console.log(
+  'abcDee'.match(hyphenateRE),
+  hyphenate('abcDee')
+);

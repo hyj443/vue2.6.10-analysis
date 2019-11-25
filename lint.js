@@ -90,17 +90,25 @@
 
 
 // valid为假，警告开发者所传的prop值的类型不符合预期。打印expectedTypes数组中的类型字符串告诉开发者该prop所期望的类型。同时通过toRawType 函数获取真正的 prop 值的类型并提示
-function cached(fn) {
-  var cache = Object.create(null)
-  return str => {
-    var hit = cache[str]
-    return hit || (cache[str] = fn(str))
-  }
-}
-var hyphenateRE = /\B([A-Z])/g;
 
-var hyphenate = cached(str => str.replace(hyphenateRE, '-$1'))
-console.log(
-  'abcDee'.match(hyphenateRE),
-  hyphenate('abcDee')
-);
+
+// 在 processRawAttrs 函数内部首先定义了 l 常量，，接着使用一个 if 语句判断 l 是否为真，如果，此时会执行 if 语句块内的代码，在 if 语句块内首先定义了 attrs 常量，它与 el.attrs 属性有着相同的引用，初始值是长度为 l 的数组。接着使用 for 循环，并：
+
+
+
+var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
+
+let text='aaaa{{飞飞飞}}efefeefe'
+
+let match = defaultTagRE.exec(text)
+
+console.log(match[1]);
+
+
+let tokenValue=  text.slice(0, match.index)
+
+
+
+// console.log(tokenValue);
+
+

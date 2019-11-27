@@ -513,7 +513,7 @@ VNode树的构建过程，是VNode类的实例化，有了vnode就能遍历子�
 ```
 createElm函数包含真实DOM节点的创建和插入，之前生成的vnode决定了最终应该生成何种节点，即生成的真实DOM节点依赖于vnode携带的信息
 
-获取了vnode的标签名tag，如果标签名存在，说明vnode对应的是元素节点，如果vnode的data属性存在，就调用invokeCreateHooks
+获取了vnode的标签名tag，如果标签名存在，说明vnode对应的是元素节点，即普通节点(区别于组件)，如果vnode的data属性存在，就调用invokeCreateHooks
 
 ```js
   function invokeCreateHooks (vnode, insertedVnodeQueue) {
@@ -551,9 +551,8 @@ for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
 其中第一个参数是 var emptyNode = new VNode('', {}, []); 第二个参数vnode是当前vnode节点
 
 ```js
-  // 更新原生dom事件，区别于更新自定义事件。传入旧的和新的vnode对象
   function updateDOMListeners (oldVnode, vnode) {
-    if (isUndef(oldVnode.data.on) && isUndef(vnode.data.on)) return //如果新旧vnode对象都没有on，说明都没有自定义事件，直接返回
+    if (isUndef(oldVnode.data.on) && isUndef(vnode.data.on)) return //如果新旧vnode对象都没有on，说明都没有绑定事件，直接返回
     var on = vnode.data.on || {}; // 这就是之前生成的data中对应的事件对象
     var oldOn = oldVnode.data.on || {}; // 旧vnode的on对象
     target$1 = vnode.elm; // 获取当前vnode的真实DOM对象
@@ -563,5 +562,217 @@ for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
     target$1 = undefined;
   }
 ```
-updateDOMListeners函数的作用是更新
+updateDOMListeners函数的作用是更新原生DOM事件，区别于自定义事件(自定义事件只能在模板中的组件绑定)
+
+updateDOMListeners接收旧的和新的vnode对象，如果新旧vnode的data对象都没有定义on，说明都没有绑定事件，直接返回
+
+normalizeEvents是对事件做兼容性处理，针对v-model，它在ie浏览器中不支持change事件，只能用input事件代替
+
+最后调用updateListeners，遍历on对象，对新vnode的事件进行绑定注册，对vnode的节点移除事件回调，而且这个函数既要处理原生DOM事件的添加和移除，也要处理自定义事件的添加和移除
+
+```js
+  function updateListeners(on, oldOn, add, remove$$1, createOnceHandler, vm) {
+    var name, def$$1, cur, old, event;
+    for (name in on) { 
+      def$$1 = cur = on[name]; 
+      old = oldOn[name];
+      event = normalizeEvent(name); 
+      if (isUndef(cur)) {
+        warn(`"${event.name}"的事件处理函数是无效的:得到的是` + String(cur), vm)
+      } else if (isUndef(old)) {
+        if (isUndef(cur.fns)) {
+          cur = on[name] = createFnInvoker(cur, vm)
+        }
+        if (isTrue(event.once)) { 
+          cur = on[name] = createOnceHandler(event.name, cur, event.capture);
+        }
+        add(event.name, cur, event.capture, event.passive, event.params)
+      } else if (cur !== old) {
+        old.fns = cur;
+        on[name] = old
+      }
+    }
+    for (name in oldOn) { //遍历旧的事件监听器对象
+      if (isUndef(on[name])) {//如果存在某个事件在新的on对象中没有，说明这个事件要被移除
+        event = normalizeEvent(name) // 整理出标准化的事件名对象
+        remove$$1(event.name, oldOn[name], event.capture); // 移除事件处理函数
+      }
+    }
+  }
+```
+updateListeners函数接收新旧事件监听器对象，事件添加和移除的函数，以及实例vm，然后遍历on对象，如果当前某个事件在oldOn对象中没有对应的回调，说明需要调用add去添加该事件的回调；相反，如果oldOn对象中某个事件在当前的on对象中没有对应的回调，说明该事件的回调需要被移除。
+
+```js
+for (name in on) {
+      def$$1 = cur = on[name]
+      old = oldOn[name];
+      event = normalizeEvent(name); 
+      if (isUndef(cur)) { 
+        warn(`"${event.name}"的事件处理函数是无效的:得到的是` + String(cur), vm)
+      } else if (isUndef(old)) {
+        if (isUndef(cur.fns)) {
+          cur = on[name] = createFnInvoker(cur, vm);
+        }
+        if (isTrue(event.once)) { 
+          cur = on[name] = createOnceHandler(event.name, cur, event.capture);
+        }
+        add(event.name, cur, event.capture, event.passive, event.params) 
+      } else if (cur !== old) { //如果cur!==old，即对于同一事件，它的回调函数前后变化了，我们不需要调用add去添加一个新的事件回调，因为old指向了invoker，它的fns是真正的回调old，只需将fns属性值改为cur，即用新的处理回调覆盖。再把old赋给on[name]，即cur和on[name]指向了invoker
+        old.fns = cur;
+        on[name] = old; //保证了事件回调invoker只创建一次，之后更新回调只用修改invoker的fns属性值
+      }
+    }
+```
+
+遍历新的事件监听器对象on，def$$1 = cur = on[name] 当前遍历的事件name对应的事件对象，赋给def$$1和cur。当前的事件name在oldOn对象中对应的事件对象赋给old
+
+然后调用normalizeEvent，生成规范化后的事件名对象，它包含了修饰符的使用情况
+
+if (isUndef(cur)) 如果on对象中name对应的事件对象不存在，说明事件name对应的处理函数是无效的，报错提示。
+
+如果oldOn对象没有事件name的对应的事件对象，说明该事件回调需要新增。
+
+```js
+if (isUndef(cur.fns)) {
+  cur = on[name] = createFnInvoker(cur, vm)
+}
+```
+
+如果cur对象，即当前事件name对应的事件对象，fns属性没有定义，说明之前没有为该事件创建过回调，则调用createFnInvoker创建事件最终执行的回调，叫invoker，赋给cur
+
+```js
+  function createFnInvoker (fns, vm) {
+    function invoker () {
+      const fns = invoker.fns
+      if (Array.isArray(fns)) {
+        const cloned = fns.slice() 
+        for (let i = 0; i < cloned.length; i++) { 
+          invokeWithErrorHandling(cloned[i], null, arguments, vm, `v-on handler`)
+        }
+      } else {
+        return invokeWithErrorHandling(fns, null, arguments, vm, `v-on handler`)
+      }
+    }
+    invoker.fns = fns 
+    return invoker 
+  }
+```
+createFnInvoker函数第一个参数fns，接收一个事件处理函数，或一个包含多个处理函数的数组
+
+createFnInvoker函数在内部会定义一个invoker函数，并最终返回它，invoker会挂载一个fns属性，用来存放传入的fns，在invoker函数中，会根据fns的类型执行fns数组中的函数，还是fns这个单个处理函数
+
+所以createFnInvoker作为最终的事件处理回调，它的执行其实是fns的执行，fns是数组那就遍历执行数组中的回调，fns是函数，那就直接执行fns
+
+```js
+  function invokeWithErrorHandling(handler, context, args, vm, info) {
+    let res
+    try {
+      res = args ? handler.apply(context, args) : handler.call(context)
+      if (res && !res._isVue && isPromise(res) && !res._handled) {
+        res.catch(e => handleError(e, vm, info + ` (Promise/async)`))
+        res._handled = true
+      }
+    } catch (e) {
+      handleError(e, vm, info)
+    }
+    return res
+  }
+```
+invokeWithErrorHandling函数接收定义好的handler函数，用try-catch语句将handler的执行包裹，捕获执行时发生的错误，用Promise.catch捕获异步任务返回错误
+
+```js
+if (isTrue(event.once)) {
+  cur = on[name] = createOnceHandler(event.name, cur, event.capture);
+}
+add(event.name, cur, event.capture, event.passive, event.params)
+```
+
+如果当前事件用了once修饰符，则on[name]就指向一个一次性的处理函数，执行一次就删除处理回调。
+
+```js
+  var target$1;
+  function createOnceHandler (event, handler, capture) {
+    var _target = target$1; 
+    return function onceHandler () {
+      var res = handler.apply(null, arguments);
+      if (res !== null) {
+        remove$2(event, onceHandler, capture, _target);
+      }
+    } 
+  }
+  function remove$2(name, handler, capture, _target) {
+    (_target || target$1).removeEventListener(name, handler._wrapper || handler, capture);
+  }
+```
+
+createOnceHandler函数中定义了_target变量，和一个onceHandler函数，onceHandler函数是要返回的
+
+onceHandler函数执行，会执行传入的handler，执行结果赋给res，res如果不为null，则调用remove函数，调用_target的removeEventListener，将该事件的处理函数handler移除
+
+然后 `add(event.name, cur, event.capture, event.passive, event.params)`
+
+```js
+function add$1(name, handler, capture, passive) {
+  // ....
+  target$1.addEventListener(name, handler, supportsPassive ? { capture, passive } : capture)
+}
+```
+
+将事件name注册到真实DOM对象上，当该对象触发事件name时，回调函数handler就会执行
+
+```js
+else if (cur !== old) {
+  old.fns = cur;
+  on[name] = old;
+}
+```
+
+如果cur !== old，即对于同一个事件name，它前后的事件对象不一样了，因为使用了invoker和fns，我们不需要调用add去添加一个新的事件回调。old指向了invoker，invoker的fns属性是真正的回调，值为old，现在只需将invoker的fns属性值由old改为cur
+
+再把old赋给on[name]，所以cur和on[name]就指向了invoker
+
+这样的机制，就保证了事件回调invoker只创建一次，之后更新事件回调只用修改invoker身上的fns属性即可，不用再次创建invoker
+
+```js
+for (name in oldOn) {
+  if (isUndef(on[name])) {//如果存在某个事件在新的on对象中没有，说明这个事件要被移除
+    event = normalizeEvent(name) // 整理出标准化的事件名对象
+    remove$$1(event.name, oldOn[name], event.capture); // 移除事件处理函数
+  }
+}
+```
+updateListeners函数中，还要遍历旧的事件监听器对象，如果存在某个事件name在新的on对象中没有，但在旧的oldOn对象中有，说明这个事件是要被移除的。
+
+调用normalizeEvent函数整理出规范化的事件名对象
+
+remove$$1函数调用，将事件处理函数移除
+
+## 自定义事件
+
+Vue处理原生的DOM事件已经讲完，但组件的自定义事件没有讲，父子组件是利用事件通信的，子组件通过vm.$emit触发父组件的事件，父组件通过v-on:注册了事件，并在事件被触发时，能接受到子组件派发的信息，并执行事件处理回调。
+
+我们知道，普通节点只能使用原生DOM事件，而组件上却可以使用自定义事件和原生DOM事件，并且通过native修饰符区分，我们看看原生DOM事件和自定义事件有什么区别之处
+
+我们在模板编译生成ast树阶段，addHandler函数会对事件的修饰符做不同的处理，当遇到native修饰符时，事件相关的属性方法会添加到nativeEvents属性中
+
+```js
+function genData() {
+  ···
+  if (el.events) {
+    data += (genHandlers(el.events, false)) + ",";
+  }
+  if (el.nativeEvents) {
+    data += (genHandlers(el.nativeEvents, true)) + ",";
+  }
+}
+```
+不管是组件还是普通标签，事件处理代码都在genData的过程中，genHandlers用来处理事件对象并拼接字符串。处理组件的原生事件和自定义事件的区别在isNative参数，我们看最终生成的代码为：
+
+```js
+with(this){return _c('div',{attrs:{"id":"app"}},[_c('child',{on:{"myevent":myevent},nativeOn:{"click":function($event){return nativeClick($event)}}})],1)}
+
+```
+有了渲染函数接下来会根据它创建vnode实例，其中遇到组件占位符节点时会创建子组件vnode
+
+_c
 

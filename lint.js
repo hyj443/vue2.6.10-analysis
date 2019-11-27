@@ -98,17 +98,15 @@
 
 var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
 
-let text='aaaa{{飞飞飞}}efefeefe'
+let text = 'aaaa{{飞飞飞}}efefeefe'
 
 let match = defaultTagRE.exec(text)
 
 console.log(match[1]);
 
 
-let tokenValue=  text.slice(0, match.index)
+let tokenValue = text.slice(0, match.index)
 
 
 
 // console.log(tokenValue);
-
-

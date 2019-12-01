@@ -331,10 +331,10 @@
     }
   };
   var uid = 0;
-  // Dep实例用来管理watcher实例，脱离了watcher，dep单独存在没有意义
+  // Dep实例用来管理watcher实例
   class Dep {
     constructor() {
-      this.id = uid++
+      this.id = uid++ // 每个dep实例都有唯一的id
       this.subs = [] // dep实例的subs是专门存放watcher实例的数组
     }
     addSub(sub) { // 将watcher推入到subs数组中
@@ -345,34 +345,34 @@
     }
     depend() {
       if (Dep.target) { // 定义响应式属性的get函数时，已经判断过是否有Dep.target，然后才调用depend方法，在depend方法中又判断一次，这不是多此一举，因为该depend方法除了在key的get方法中用到，还在计算属性的watcher中用到。
-        Dep.target.addDep(this) // depend方法并没有直接收集依赖，而是调用watcher的addDep方法，传入当前dep实例，交由addDep方法中调用dep的addSub方法。因为要在那根据传入的dep做一些判断，避免重复的收集依赖。
+        Dep.target.addDep(this) // depend方法并没有直接收集依赖，而是调用watcher的addDep方法，传入当前dep实例，交由addDep方法中调用dep的addSub方法。因为要对传入的dep做一些判断，避免重复的收集依赖。
       }
     }
-    // 比如模版中使用数据属性name，模版会被编译成渲染函数，在执行$mount时，会调用mountComponent，会创建渲染函数的watcher，对渲染函数求值，求值的过程会读取name属性，触发name的get，这个watcher被收集到name的dep中，当后面修改name的属性值时，name的set被触发，set中调用dep.notify方法。
-    notify() { // 通知依赖重新求值
+    //模版中使用数据属性name，模版被编译成渲染函数，执行$mount进行挂载时，会调用mountComponent，会创建渲染函数的watcher，对渲染函数求值，求值的过程会读取name属性，触发name的get，这个watcher被收集到name的dep中，当后面修改name的属性值时，name的set被触发，set中调用dep.notify方法。
+    notify() { // 通知watcher重新求值
       const subs = this.subs.slice() //先拷贝一份subs数组
       if (!config.async) {
         subs.sort((a, b) => a.id - b.id)
       }
-      subs.forEach(sub => { // 遍历当前dep的subs数组中 所有的watcher，逐个调用它的update方法
+      subs.forEach(sub => { // 遍历当前dep的subs数组中所有的watcher，逐个调用它的update方法
         sub.update() //触发依赖其实就是对被观察的目标的重新求值，重新求值发生在update()
       })
     }
   }
-  // Dep.target是全局唯一的，用来存放当前正在计算的watcher实例，即将要被收集的依赖，一次只会有一个watcher被计算。
+  // Dep.target是当前正在求值的watcher实例，是全局唯一的，当某个watcher调用它的get方法对被观察目标求值时，会将自己赋给Dep.target，并将自己压入targetStack，等到这个watcher求值完毕后，会从targetStack栈中取出之前的Dep.target，重新作为当前的Dep.targe
   Dep.target = null;
   var targetStack = []; // 用来存放watcher的栈
   function pushTarget(target) {
-    targetStack.push(target); // 将传入的target推入targetStack数组（为了恢复用）
+    targetStack.push(target) // 将传入的target推入targetStack数组
     Dep.target = target; // 将传入的target赋给Dep.target
   }
-  function popTarget () {
-    targetStack.pop(); // 让targetStack栈弹出一个watcher
-    Dep.target = targetStack[targetStack.length - 1] //让Dep.target继续指向targetStack的栈顶
+  function popTarget() { // 恢复之前的Dep.target，这就是targetStack栈的作用
+    targetStack.pop(); // targetStack栈弹出一个watcher
+    Dep.target = targetStack[targetStack.length - 1] //Dep.target继续指向targetStack的栈顶
   }
 
-  // 页面初始化的所有状态都准备好后，下一步就是要生成组件相应的虚拟节点——VNode。第一次进行组件初始化时，VNode也会执行一次初始化并存储这时创建好的VNode对象。在随后的生命周期中，组件内的数据发生变动，会先生成新的VNode对象，再根据与之前存储的旧VNode的对比，来执行刷新页面DOM的操作。
-  // 定义VNode类自身，再定义一些常用的节点创建方法，包括创建空的注释节点，文字虚拟节点和新的克隆节点。虚拟节点本身是一个包含了所有渲染所需信息的载体，不仅有相应的DOM标签和属性信息，还包含了子虚拟节点列表，所以一个组件初始化之后得到的VNode是一棵虚拟节点树，实质是抽象和信息化了的对应于DOM树的JS对象
+  // 页面初始化的所有状态都准备好后，下一步就是生成组件相应的VNode。第一次进行组件初始化时，VNode也会执行一次初始化并存储这时创建好的VNode对象。在随后的生命周期中，组件内的数据发生变动，会先生成新的VNode对象，再根据与之前存储的旧VNode的对比，来执行刷新页面DOM的操作。
+  // 定义VNode类自身，再定义一些常用的节点创建方法，包括创建空的注释节点，文字节点和新的克隆节点。vnode本身是一个包含了所有渲染所需信息的载体，不仅有相应的DOM标签和属性信息，还包含了子vnode列表，所以一个组件初始化之后得到的VNode是一棵vnode树，实质是抽象和信息化了的对应于DOM树的JS对象。watcher实现对数据变动的观察，在收到变动的通知后处理权就交给了渲染系统，渲染系统首先进行：根据变动生成新vnode，然后对比新旧vnode，最终确定一个建立真实DOM所需依赖的抽象对象
   class VNode {
     constructor(tag, data, children, text, elm, context, componentOptions, asyncFactory) {
       this.tag = tag; // 节点的标签名
@@ -403,16 +403,15 @@
       return this.componentInstance
     }
   }
-  //知道VNode的实质后，那为啥要创建这种对象呢？watcher实现对数据变更的观察，在收到变更的通知之后处理权就交给了渲染系统，渲染系统首先进行的就是根据变动生成新vnode树，然后比对旧的vnode树，来实现这个抽象对象的更新，简而言之是是通过新旧两个节点树的对照，来最终确定一个建立真实DOM所需依赖的抽象对象。
   const createEmptyVNode = (text = '') => { // 创建一个注释节点对象
     const node = new VNode() // 创建VNode实例
     node.text = text // 默认设置text属性为''
     node.isComment = true // 设置为注释节点
     return node // 一个注释节点只有两个有效属性:text和isComment
   }
-  function createTextVNode (val) { //创建一个文本节点对象，置空tag,data,children
-    return new VNode(undefined, undefined, undefined, String(val))
-  }
+  
+  let createTextVNode = val => new VNode(undefined, undefined, undefined, String(val))
+  // 创建一个文本节点vnode
 
   // 克隆节点是将现有节点的属性复制到新节点中，作用是优化静态节点和插槽节点
   // 以静态节点为例，它的内容不会改变，所以除了首次渲染需要执行渲染函数获取vnode外，后续更新不需要执行渲染函数重新生成静态vnode节点，因此使用克隆节点方法将vnode克隆一份，使用克隆节点进行渲染，就不用重新执行渲染函数生成新的静态节点的vnode
@@ -466,148 +465,131 @@
   const arrayMethods = Object.create(arrayProto); //创建一个空对象，原型指向Array原型
   const mutationMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse']
 
-  // 初衷是：我们调用变异方法改变数组，希望触发数组的dep所搜集的依赖，通知依赖执行更新
-  mutationMethods.forEach(function (method) {
-    // 改写这7个数组变异方法，在原有功能的基础上，加入触发依赖的功能
+  // 一个响应式的被观测的数组，我们希望在调用数组变异方法改变数组时，能触发数组的dep收集的依赖，通过依赖执行更新。
+  mutationMethods.forEach(function (method) {//遍历这7个数组变异方法的函数名，重新定义函数
     var original = arrayProto[method]; // 缓存数组原本的变异方法
-    // 调用def函数在arrayMethods对象上定义与数组变异方法同名的方法
-    def(arrayMethods, method, function mutator(...args) {
-      var ob = this.__ob__ // 要想触发数组的依赖，必须要找到存放依赖的地方。被观测的value数组有__ob__属性，值为Observer实例，实例上有存放依赖的dep实例。数组调用变异方法时，方法中的this指向数组本身，this.__ob__.dep存放着该数组的依赖
-      var inserted // 对于被观测的数组，我们会递归地观测数组的每一个元素。有的数组变异方法会往数组里增加元素，新加入的元素也需要被观测，也需要调用observeArray方法
+    def(arrayMethods, method, function mutator(...args) { //在arrayMethods对象上定义新的同名方法，在原有功能的基础上，加入触发依赖的功能
+      const result = original.apply(this, args) // 原本的方法的执行，保留它原有功能
+      var ob = this.__ob__ // 数组变异方法中想要触发数组的依赖，必须引用存放依赖的dep，被观测的数组有__ob__属性，值为Observer实例，实例上有dep。数组调用变异方法时，方法中的this指向数组本身，this.__ob__.dep存放着该数组的依赖
+      var inserted // 对于被观测的数组，我们会递归地观测数组的每一个元素。有的数组变异方法会往数组里增加元素，新加入的元素也需要被观测
       switch (method) {
         case 'push':
         case 'unshift': inserted = args; break
         case 'splice': inserted = args.slice(2); break
       }
-      // inserted取到的就是新增元素组成的数组，我们期望调用observeArray方法
-      // observeArray是Observer的原型方法，于是ob这个Observer实例可以引用到这个方法
-      if (inserted) {
-        ob.observeArray(inserted);
+      if (inserted) {// inserted是新增元素组成的数组，observeArray的调用就是observe数组每一项
+        ob.observeArray(inserted);//observeArray是Observer的原型方法，ob这个Observer实例可以引用到这个方法
       }
-      // 以上是观测新增元素的实现，下面是实现依赖触发
-      ob.dep.notify(); // 被观测的数组对的dep实例是:this.__ob__.dep即ob.dep，触发它里面的依赖
-      return original.apply(this, args) // 执行数组原本方法让其原本功能实现，并把返回值返回
+      ob.dep.notify() // ob.dep即this.__ob__.dep，即被观测的数组的dep实例，触发它里面的依赖
+      return result // 正常返回数组原本方法执行的返回值
     });
   });
 
   var shouldObserve = true;
-  function toggleObserving (value) { // 控制 shouldObserve 这个开关
-    shouldObserve = value;
-  }
+  let toggleObserving = (value) => { shouldObserve = value }
 
-  // Observer构造函数接收的已经是数组/对象了，在这里完成数据的观测（响应式化）
+  // Observer构造函数的实例化完成对value的观测(响应式化)，创建被观测的value的Observer实例，value的__ob__属性指向Observer实例，Observer实例的value属性指向被观测的value，实现了互相引用，映射的关系
   class Observer {
-    constructor(value) {
-      this.value = value; // 被观测的value，赋给Observer实例的value属性
-      this.dep = new Dep(); // 创建Dep实例，赋给Observer实例的dep属性
+    constructor(value) { // 接收的value已经是数组/对象
+      this.value = value; // Observer实例的value属性记录被观测的value
+      this.dep = new Dep(); // Observer实例维护一个Dep实例，它保存所有依赖于value的watcher实例
       this.vmCount = 0; // 实例计数器，初始化为0
-      def(value, '__ob__', this); // 给被观测的value添加一个不可枚举属性__ob__，值为当前的Observer实例。于是可以通过value.__ob__引用观测它的Observer实例，value.__ob__.dep可以引用到属于它的Dep实例
+      def(value, '__ob__', this) // 给被观测的value添加一个不可枚举属性__ob__，值为当前的Observer实例。于是value.__ob__就引用到观测它的Observer实例，value.__ob__.dep就引用到属于value的Dep实例
       if (Array.isArray(value)) { // 如果观测的value是数组
-        if ('__proto__' in {}) { // 如果当前的执行环境 __proto__ 属性可用
-          value.__proto__ = arrayMethods // 通过修改value的__proto__属性值，value的原型对象指向了arrayMethods，不再指向Array.prototype
-        } else { // 如果 __proto__ 不可用，将改造后的数组变异方法直接挂载到被观测的数组value上
-          mutationMethods.forEach(methodName => {
+        if ('__proto__' in {}) { // 如果当前环境 __proto__ 属性可用
+          value.__proto__ = arrayMethods // 通过修改value的__proto__属性值，value的原型对象指向了arrayMethods，不再指向Array.prototype，因此value调用7个变异方法时，会实际调用改动的数组方法，而不是原本的数组原型方法
+        } else { // 如果__proto__不可用，将改造后的数组变异方法直接挂载到被观测的数组value上
+          mutationMethods.forEach(methodName => {//成为value的自身方法后，就比原型上的方法优先
             def(value, methodName, arrayMethods[methodName])
           })
         }
-        // 不管是通过更改原型对象，还是直接添加方法到value上，都是让value调用改动后的数组变异方法，而非原生的原型方法
-        this.observeArray(value) // 如果数组value嵌套了数组/对象，元素项调用数组变异方法或修改属性值->数组元素改变->value本身改变，但却无法触发value的依赖，因为不是value调用数组变异方法。因此，递归地观测每一个数组元素，将它们也响应式化，使之具备触发数组本身的依赖的能力
-      } else {
-        this.walk(value); // 如果被观测的value是对象，调用walk将每一个属性转成响应式属性
+        this.observeArray(value) //这是递归观测数组每一个元素，因为如果数组value嵌套了数组/对象，元素项调用数组变异方法或修改属性值->数组元素改变->value本身改变，但因为不是value调用的数组变异方法而无法触发value的依赖。因此，将每一个数组元素响应式化，让它们具备触发数组本身的依赖的能力
+      } else { // 如果被观测的value是对象，调用walk将每一个属性转成响应式属性
+        this.walk(value)
       }
     }
     walk(obj) { 
       var keys = Object.keys(obj)
-      keys.forEach(key => {// 遍历value对象的自身属性，调用defineReactive$$1
-        defineReactive$$1(obj, key)
+      keys.forEach(key => {// 遍历value对象的自身属性，调用defineReactive
+        defineReactive$$1(obj, key) // 将对象的每一个属性转为响应式属性，当该属性值发生变化时，可以告知所有依赖该属性的watcher
         // 没传val，说明有意暂时先不获取属性值，而在函数内部获取val
-        // 没有传shallow，说明默认是深度观测
+        // 没传shallow，说明默认是深度观测
       })
     }
     observeArray(arr) { // 观测数组的每一项，不确定是对象/数组/其他，所以调用observe
-      arr.forEach(item => {
-        observe(item)
-      })
+      arr.forEach(item => { observe(item) })
     }
   }
   
   // observe函数为观测的value创建Observer实例，如果观测成功则返回新建的Observer实例/已存在的Observer实例，如果观测失败(value不需观测)则返回undefined
-  function observe(value, asRootData) { // asRootData: 被观测的数据是否为根data
+  function observe(value, asRootData) { // asRootData: value是否为根data
     if (!isObject(value) || value instanceof VNode) return;
-    // 如果不是对象，不用观测，VNode实例不用观测，直接返回
+    // 不是对象，不用观测，VNode实例不用观测，直接返回
     var ob;
     if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
-      ob = value.__ob__ //被观测的值传入new Observer执行后会被添加__ob__属性，并且属性值为Observer实例，这意味着它被观测过，对于被观测过的value，直接将value.__ob__，即Observer实例，赋给ob，这是为了避免重复观测，重复创建Observer实例
+      ob = value.__ob__ //条件成立代表value被观测过了，因为被观测的值传入new Observer执行后会被添加__ob__属性，属性值为Observer实例。对于被观测过的value，直接将value.__ob__，即Observer实例，赋给ob并最后返回，这是为了避免重复观测，重复创建Observer实例
     } else if ( // 没有被观测过
       shouldObserve && // “需要观测”的开关开启了
       !isServerRendering() &&  // 不是服务端渲染，服务端渲染时不观测数据
       (Array.isArray(value) || isPlainObject(value)) && // 数组或纯对象，才有必要观测
       Object.isExtensible(value) && // value是可扩展的（可以添加新属性）
       !value._isVue // 不是Vue实例，Vue实例不用观测
-    ) {
-      ob = new Observer(value); //对于没被观测过的value，为它创建Observer实例，并赋给ob
+    ) {//没被观测过且可观测的value，为它创建Observer实例，并赋给ob
+      ob = new Observer(value)
     }
     if (asRootData && ob) { //如果asRootData为真且ob值存在，ob.vmCount自增
-      ob.vmCount++;
+      ob.vmCount++ // Observer实例上的vmCount>0说明是它是根data的Observer实例
     }
     return ob // Observer实例或undefined
   }
 
-  // 观测一个纯对象，需要将对象的属性转为响应式属性
+  // 观测一个纯对象，将对象的属性转为响应式属性，为属性的属性描述符添加get和set方法，当获取该响应式属性的值时，get函数被触发，进行依赖收集，当设置该响应式属性的值时，set方法被触发，通知依赖该属性的值变化了
   function defineReactive$$1(obj, key, val, customSetter, shallow) {
     var dep = new Dep();
-    // 在函数内部定义一个dep变量，指向一个Dep实例，dep只在函数执行时的函数作用域内可用，函数执行结束，它就不能被访问了，但定义在函数内部的key的get/set函数里引用了变量dep，形成了闭包，所以dep不会随着函数执行结束而销毁，会一直保留在内存中，这样每次调用get/set方法都能访问这个dep，相当于被观测对象的每个key，都通过get/set引用着属于自己的dep
-    var property = Object.getOwnPropertyDescriptor(obj, key)//获取obj的自有属性key的属性描述符
+    // 函数内部定义一个dep变量，指向一个Dep实例。函数执行结束，函数的执行上下文已经被销毁了，即从执行上下文栈中被弹出了，定义在函数内部的key的get/set函数里引用了变量dep，即使外部函数的执行上下文被销毁，但JS仍然会让dep存留在内存中，即dep不会随着函数执行结束而销毁，每次调用get/set方法都能访问这个dep。被观测对象的每个响应式key，都唯一地对应一个dep实例
+    var property = Object.getOwnPropertyDescriptor(obj, key) //获取obj的自有属性key的属性描述符
     if (property && property.configurable === false) return
     // 如果key的属性描述符存在且configurable为false，说明它的属性描述符不能重新定义，并且该key不能从对象中删除，说明使用Object.defineProperty去定义key的属性描述符是无效的，直接返回
 
-    // key可能本身就有自己的get/set，我们先缓存一份到getter/setter，因为接下来会重新定义key的get/set，会导致原有的被覆盖，在重新定义的get/set函数中，调用缓存的getter/setter，因为我们不改变key的原本的读写操作
+    // key可能本身就有自己的get/set，我们先缓存一份给getter/setter，因为接下来会重新定义key的get/set，在重新定义的get/set函数中，调用缓存的getter/setter，就能不改变key的原本的读写操作
     var getter = property && property.get;
     var setter = property && property.set;
-    if ((!getter || setter) && arguments.length === 2) { //没有传第三个参数val
-      val = obj[key]; // 求出val的目的是继续观测属性值
-      //(!getter||setter)的相反情况是：有getter没setter：key是只读属性属性，假如val是对象或数组，val内部的改变也就是val的改变，需要触发key的依赖，但现在key只读，val不会改变，所以没有观测val的必要，val因此为undefined，observe(val)时直接return了。
-    }
-    // 满足了上面的if条件，val才会拿到值，不满足条件，val是undefined，深度观测val无效
-    var childOb = !shallow && observe(val);
-    // key的val可能是对象/数组/其他，调用observe继续观测，返回值赋给childOb，如果val是数组/对象，返回val.__ob__，Observer实例，如果val是别的类型，observe(val)中途直接返回，childOb是undefined
-    // 注意到，在key的get/set方法中，也引用着外层函数作用域中定义的childOb，产生了闭包，childOb随着函数执行完毕也销毁不了，相当于val拥有一个属于自己的childOb
-    Object.defineProperty(obj, key, { // 将对象中的属性转成getter/setter
+    if ((!getter || setter) && arguments.length === 2) { val = obj[key] }
+    // 求出val的目的是继续观测val。(!getter||setter)的相反情况是：key有getter没setter，是只读属性，val不会改变，没有深度观测val的必要，因此val为undefined
+    // 上面的if条件满足，val才会拿到值，不满足则val是undefined，observe(val)会直接返回，观测val无效
+    var childOb = !shallow && observe(val); // shallow为真代表不深度观测
+    // 调用observe继续观测key的val，返回值赋给childOb，如果val是数组/对象，返回val.__ob__，Observer实例，如果val是别的类型，observe(val)直接返回，childOb是undefined
+    // 注意到，在key的get/set方法中，也引用着外层函数作用域中定义的childOb，产生了闭包，childOb随着函数执行完毕依然存留在内存中，相当于val拥有一个属于自己的childOb
+    Object.defineProperty(obj, key, { // 直接在对象中定义或修改属性
       enumerable: true,
       configurable: true,
       get() {
-        var value = getter ? getter.call(obj) : val //如果key本来就有get方法，直接执行它，得到的属性值赋给value，这保证了key原来的读取操作正常，如果没有get方法，value就取val，即obj[key]
-        if (Dep.target) { // 如果存在当前要被收集的依赖
-          dep.depend(); // 调用当前key的dep实例的depend方法，收集当前依赖(Dep.target)
-          if (childOb) { // 如果childOb存在，即observe(val)返回的Observer实例，说明key的val是对象/数组，childOb===val.__ob__；childOb.dep===val.__ob__.dep
-            childOb.dep.depend(); // val也被观测了，调用它的Observer的dep的depend方法
-            // 可见不光key的dep收集了当前依赖，key的val.__ob__.dep也收集了。为什么要将同一个依赖分别收集到两个不同的dep？
-            // 我们知道修改key的val能触发key的依赖，如果val是对象/数组，也会被响应式化，修改嵌套对象的属性或嵌套数组元素项调用数组变异方法，也能触发key的依赖，我们还希望给对象添加属性/数组添加元素，这种改变val的方式，也能触发key的依赖，但Object.defineProperty监测不到这种变化，它只能拦截属性值的读取和修改，无法拦截给对象添加/删除属性的操作。Vue提供了Vue.set/$set方法来解决这个问题，大致实现如下
-            // Vue.set = function (target, key, val) {
-            //   defineReactive(target, key, val)
-            //   target.__ob__.dep.notify()
-            // }
-            // 如果响应式属性key的val是对象/数组，在初始化state阶段，val被递归观测，成为响应式的数据，因此给val添加的属性也要是响应式的，调用defineReactive去定义响应式的新属性。同时，我们希望Vue.set执行能触发key的dep中存放的依赖，但在Vue.set中引用不到到key的dep，因为传入函数的target已经是key的val了。但因为val它有__ob__属性，能引用到val.__ob__.dep实例，我们让它收集和key的dep所收集的一样的依赖，于是Vue.set执行时，target.__ob__.dep调用notify，触发的是和key的dep存的相同的依赖，从而通知key的依赖。
-
-            // 两个dep收集相同的依赖，但触发时机不同，作用也不同。key的dep的依赖触发时机是：当key的val被修改时，触发key的set，执行dep.notify，从而触发key的依赖。
-            // val.__ob__.dep收集的依赖的触发时机：在使用Vue.set给key的val添加新属性时触发，作用是在给val添加/删除属性时，可以触发和key的dep中相同的依赖，这也是__ob__和__ob__.dep存在的意义
-            if (Array.isArray(value)) { // 当val是数组时，我们不止需要key的dep收集依赖，val.__ob__.dep收集依赖，还要让数组的每个元素收集依赖，为什么？
+        var value = getter ? getter.call(obj) : val //如果key本来就有get方法，直接执行它，返回值赋给value，这保证了key原来的读取操作正常，如果没有get方法，val赋给value，val可能是传入的val也可能是obj[key]
+        if (Dep.target) { // 如果存在当前正在计算的watcher(依赖)
+          dep.depend(); // 调用当前key的dep实例的depend方法，收集这个Dep.target
+          if (childOb) { // 如果childOb存在，即observe(val)返回的是Observer实例，说明key的val是对象/数组，也被观测了
+            // childOb === val.__ob__; childOb.dep === val.__ob__.dep
+            childOb.dep.depend(); // 调用val的Observer实例的dep的depend方法，不只是key的dep收集了当前依赖，为什么key的val.__ob__.dep也要收集依赖呢？即同一个依赖分别收集到两个不同的dep
+            // 我们知道修改key的val能触发key的依赖，如果val是对象/数组，也会被观测，修改val对象的属性或val数组元素调用数组变异方法，也能触发key的依赖，但给对象添加属性/数组添加元素，Object.defineProperty是检测不到这种val的变化，它只能拦截属性值的读取和修改，无法拦截给对象添加/删除属性的操作，我们希望这种改变val的方式也能触发key的依赖，于是有了Vue.set/$set方法，大致实现如下：
+            /* Vue.set = function (target, key, val) {
+                defineReactive(target, key, val)
+                target.__ob__.dep.notify()
+              } */ 
+            // 响应式属性key的val是对象/数组的话，val会被递归观测，因此给val添加的属性也要被观测，调用defineReactive去定义响应式的新属性。同时，我们希望Vue.set执行能触发key的dep中存放的依赖，但在Vue.set中引用不到到key的dep，因为传入函数的target已经是key的val了。没事，val它有__ob__属性，能引用到val.__ob__.dep实例，我们让它收集和key的dep所收集的一样的依赖，于是Vue.set执行时，target.__ob__.dep.notify()，触发的是和key的dep存的相同的依赖。
+            if (Array.isArray(value)) { // 当val是数组时，不止key的dep收集依赖，val.__ob__.dep收集依赖，还要让每个数组元素收集依赖
               dependArray(value) // 逐个调用元素的__ob__.dep的depend方法，收集依赖
             }
-            // 比如data中有属性arr，值为数组，第一项是一个对象，首先data.arr肯定被观测了，所以存在data.arr.__ob__，data.arr[0]也被观测了，存在data.arr[0].__ob__。现在模版里使用了arr，渲染函数执行将触发arr属性的get，data.arr的dep和data.arr.__ob__.dep都存了该依赖，但data.arr[0].__ob__.dep并没有收集依赖。如果给arr[0]增加响应式属性，即this.$set(this.data.arr[0],'b',2)时，是无法触发依赖的，因为data.arr[0].__ob__.dep没有收集依赖，但数组元素的变化也是数组本身的变化。为了让这种情况下也能触发响应，就必须让data.arr[0].__ob__.dep也收集同一份依赖，这就是dependArray的作用。
-            // 注意到，通过索引修改数组元素值是不能触发响应的。Vue通过拦截数组的变异方法，加入触发依赖的操作(依赖存在数组的__ob__的dep)，从而使通过调用变异方法改变数组能触发依赖。假如元素正好是对象，你直接通过arr[index]去修改对象，虽然arr[index]是响应式数据，但也是无法触发arr的依赖，只有通过$set给该元素对象添加/修改属性，利用data.arr[index].__ob__.dep.notify的调用。所以该dep要存一份和arr的dep存的一样的依赖。所以响应式key的val是数组时，不仅数组本身的dep要收集依赖，它的子元素也要递归收集依赖，这样的话，通过$set改变数组的元素就能触发arr的依赖。
+            // 比如data中有属性arr，值为数组，第一项是一个对象，首先data.arr肯定被观测了，所以存在data.arr.__ob__，data.arr[0]也被观测了，存在data.arr[0].__ob__。现在模版里使用了arr，渲染函数执行将触发arr属性的get，data.arr的dep和data.arr.__ob__.dep都存了该依赖，但data.arr[0].__ob__.dep并没有收集有依赖。如果给arr[0]增加响应式属性，即this.$set(this.data.arr[0],'b',2)执行，是无法触发依赖的，但数组元素的变化也是数组本身的变化。为了让这种情况下也能触发响应，就必须让data.arr[0].__ob__.dep也收集同一份依赖，这就是dependArray的作用。
+            // 通过索引修改数组元素值是不能触发响应的，Vue通过拦截数组的变异方法，加入触发依赖的操作(依赖存在数组的__ob__的dep)，从而使通过调用变异方法改变数组能触发依赖。假如元素正好是对象，你直接通过arr[index]去修改对象，虽然arr[index]是响应式数据，但也是无法触发arr的依赖，只有通过$set给该元素对象添加/修改属性，利用data.arr[index].__ob__.dep.notify的调用。所以该dep要存一份和arr的dep存的一样的依赖。所以响应式key的val是数组时，不仅数组本身的dep要收集依赖，它的子元素也要递归收集依赖，这样的话，通过$set改变数组的元素就能触发arr的依赖。
           }
         }
         return value // 正常返回属性值，这是get方法原本的功能
       },
       set(newVal) {
-        var value = getter ? getter.call(obj) : val; //如果key本来就有get方法，直接执行得到的属性值赋给value，如果没有get方法，value就取val，即obj[key]
+        var value = getter ? getter.call(obj) : val//如果key本来就有get方法，直接执行返回值赋给value，如果没有get方法，val赋给value，val可能是传入的val也可能是obj[key]
         // 新值和旧值做比较，如果新值和旧值相同，就没有触发依赖和重新设置属性值的必要，直接返回
-        if (newVal === value || (newVal !== newVal && value !== value)) return
-        // 考虑了新值和旧值都是NaN，但NaN!==NaN的情况
-        if (customSetter) {
-          customSetter();
-        }
+        if (newVal === value || (newVal !== newVal && value !== value)) return// NaN !== NaN
+        if (customSetter) customSetter()
         if (getter && !setter) return //key本来就有get没set，说明属性值不可改，没有触发更新的必要
         if (setter) { // 如果key原本就有setter，调用setter来设置函数的值，保证属性原有的赋值操作不变
           setter.call(obj, newVal)
@@ -620,40 +602,35 @@
     });
   }
 
-  // set函数用来向响应式的嵌套对象添加一个响应式属性，并且会触发响应式对象的依赖。受Object.defineProperty的局限，Vue无法探测对象属性的添加或删除，你往val添加了属性，却无法触发key的依赖
+  // 给响应式的嵌套对象添加一个响应式属性，并且会触发响应式对象的依赖。受Object.defineProperty的局限，Vue无法探测对象属性的添加或删除，你往val添加了属性，却无法触发key的依赖
   function set (target, key, val) { // target是已响应化的嵌套对象 key是响应式属性 val是属性值
-    if (isUndef(target) || isPrimitive(target))
-      warn("不能给基本类型(string,number,bigint,boolean,null,undefined,symbol)设置响应式属性")
+    if (isUndef(target) || isPrimitive(target)) warn("不能给基本类型设置响应式属性(string,number,bigint,boolean,null,undefined,symbol)")
     // 如果target是数组，set函数可以替换/新增元素，并触发数组的依赖
     if (Array.isArray(target) && isValidArrayIndex(key)) { // 索引要是有效索引
-      target.length = Math.max(target.length, key);
-      //数组的length取length和key索引的较大值，因为假如设置的元素的索引大于数组长度，不管大多少，splice(key,1,val)都只是将val追加到数组末尾，造成设置的key无效
-      target.splice(key, 1, val); // 将指定索引(key)的元素替换/新增为val
-      // 因为splice是数组变异方法，target调用splice会调用ob.observeArray(inserted)对新加入的元素进行观测，并会调用ob.dep.notify，触发数组的依赖。所以不用特别地加入触发依赖的操作。
+      target.length = Math.max(target.length, key) //数组的length根据key值调整，因为假如设置的元素的索引大于数组长度，无论设置多大，splice(key,1,val)都只是将val追加到数组末尾
+      target.splice(key, 1, val); // 将指定索引(key)的元素替换为val
+      // 因为splice是数组变异方法，target调用splice会调用ob.observeArray对新加入的元素进行观测，并会调用ob.dep.notify，触发数组的依赖。所以不用额外加入触发依赖的操作。
       return val
     }
-    // 如果target是对象，如果key在target对象中或target的原型链中已有定义(但不能在Object原型上)，直接修改属性值即可。
-    if (key in target && !(key in Object.prototype)) {
-      target[key] = val;
+    if (key in target && !(key in Object.prototype)) {//如果target是对象，key在target对象中或target的原型链中已有定义(但不能在Object原型上)，直接修改属性值即可
+      target[key] = val; //因为target是被观测的，直接修改它的属性值可以触发依赖
       return val
     }
     var ob = (target).__ob__; // 定义ob，指向target.__ob__
     if (target._isVue || (ob && ob.vmCount)) { // ob存在且ob.vmCount>0，说明target是根data
-      warn('不能给Vue实例添加属性，避免属性的覆盖。也不能用$set给根级别data添加响应式属性，你应该在初始化前就定义好所有根级别的响应式属性，哪怕赋给它一个空值，因为Vue会在实例初始化时对属性做getter/setter转化。')
+      warn('不能给Vue实例添加属性，避免属性的覆盖。也不能用$set给根级别data添加响应式属性，你应该在初始化前就定义好所有根级别的响应式属性，哪怕赋给它一个空值，因为Vue会在实例初始化时对属性做getter/setter转化')
       return val
       // 为什么不准动态添加根级别的响应式属性，因为这样并不能触发依赖。我们观测根data，是把data的key转成响应式属性，根data的确有__ob__，值为Observer实例，但data本身不是响应式的(没有自己的get/set)，data被依赖时，读取data并不会做依赖收集。所以当Vue.set(data,'xxx',1)时，此函数内部调用了data.__ob__.dep.notify()，但这个dep里并没有依赖可触发。
     }
-    if (!ob) { // target.__ob__不存在，说明target没有被观测过，直接设置属性值，不用触发依赖
+    if (!ob) { // target.__ob__不存在，说明target没有被观测，直接设置属性值，不用触发依赖
       target[key] = val;
       return val
     }
-    defineReactive$$1(ob.value, key, val); // ob存在，说明target是被观测过的对象，给target设置响应式属性key和对应的val
+    defineReactive$$1(ob.value, key, val) // ob存在，说明target被观测过，给target添加响应式属性key和对应的val
     ob.dep.notify() // 触发存在target.__ob__.dep中的依赖
     return val
   }
-  /**总结：Vue.set给数组val设置响应式属性：使用splice方法替换/新增元素，能触发val对应的key的依赖
-   * 给已经存在于目标对象的或原型链上的key，直接改动其属性值，因为key原本就是响应式属性的话，改变它的属性值也会触发响应，不是响应式属性，那也直接改变它属性值就好。
-   * 核心是最后两句：调用defineReactive给响应式的对象定义新的响应式属性，改变了key的val，所以要触发target.__ob__.dep收集的依赖(和target对应的key的dep存的依赖相同)，key的依赖被触发*/
+  /**Vue.set给数组val设置响应式属性：使用splice方法替换/新增元素，能触发val对应的key的依赖。给已经存在于目标对象的或原型链上的key，直接改动其属性值，因为key原本就是响应式属性的话，改变它的属性值也会触发响应，不是响应式属性，那也直接改变它属性值就好。核心是最后两句：调用defineReactive给响应式对象定义新的响应式属性，改变了key的val，所以要触发target.__ob__.dep收集的依赖(和target对应的key的dep存的依赖相同)，key的依赖被触发*/
   
   // 当一个数据属性被依赖了，它的val是对象，你从val中删除一个属性时，这意味着val改变了，你期待key的依赖被触发，但受限于Object.defineProperty，Vue不能检测到属性被删除这个操作。Vue靠的是Vue.delete实现在删除属性时也能触发依赖。
   function del(target, key) {
@@ -675,13 +652,11 @@
     ob.dep.notify(); // 触发target的Observer实例的dep存放的依赖
   }
 
-  function dependArray (value) {
-    value.forEach(e => {
-    //e存在并且e.__ob__存在说明数组元素e是一个被观测的对象/数组，让e.__ob__.dep收集当前依赖
-    //有可能数组元素仍是数组，递归调用dependArray，让嵌套数组的每个元素(数组/对象)也收集当前依赖
-      e && e.__ob__ && e.__ob__.dep.depend()
-      if (Array.isArray(e))
-        dependArray(e)
+  function dependArray (v) { // 让数组的每一项的__ob__的dep收集依赖
+    v.forEach(e => { // 遍历数组，如果当前元素e存在，且e是被观测的对象/数组
+      e && e.__ob__ && e.__ob__.dep.depend() //让e.__ob__.dep收集当前依赖
+      if (Array.isArray(e)) //有可能数组元素e依然是数组，递归调用dependArray
+        dependArray(e) //嵌套数组的每个元素(数组/对象)也收集当前依赖
     })
   }
 
@@ -1337,12 +1312,12 @@
   }
 
   // 当调用栈中所有任务都执行完毕，会去检查微任务队列中是否有事件存在，如果存在，则会依次执行微任务队列中事件对应的回调，直到微任务队列清空，然后去宏任务队列中取出一个事件，把对应的回调加入到当前执行栈，当执行栈中所有任务都执行完毕后，检查微任务队列中是否有事件存在，无限重复这个过程，这就叫事件循环。两个不同的宏任务之间穿插着UI的重渲染，那我们只需在微任务中把所有需要更新的数据更新，即flushCallbacks清空执行Callbacks队列，队头是flushQueueWatcher，清空执行queue中的watcher的run方法，对表达式或渲染函数重新求值，生成最新的DOM，然后queue还有用户通过$nextTick注册的一些操作最新的DOM的回调，它们的执行可以操作到最新的DOM。微任务结束后，执行宏任务，即浏览器将最新的DOM渲染到页面。所以这样只需要一次UI重渲染就能得到最新的DOM。
-  function nextTick(cb, ctx) { // 只有当$nextTick调用才会传ctx，ctx为当前vm实例
+  function nextTick(cb, ctx) {
     var _resolve;
-    callbacks.push(() => { // 将传入的cb包裹进一个函数，推入callbacks数组
+    callbacks.push(() => {
       if (cb) {
         try {
-          cb.call(ctx); // callbacks数组中的函数遍历执行，意味着cb的执行
+          cb.call(ctx);
         } catch (e) {
           handleError(e, ctx, 'nextTick');
         }
@@ -1350,17 +1325,20 @@
         _resolve(ctx);
       }
     });
-    if (!pending) { // pending默认false，代表此时微任务队列为空，可以添加微任务，if语句进来立即改为true，意味着一轮事件循环中不管多少次调用nextTick，只会在第一次执行timerFunc，即把flushCallbacks注册为微任务，执行flushCallbacks这个微任务时再将pending改为false。
+    // nextTick将传入的cb回调包裹进一个函数，将函数推入callbacks数组，函数执行会执行cb
+    if (!pending) {
       pending = true
-      timerFunc() //先检测当前环境，按照Promise,MutationObserver,setImmediate,setTimeout优先级，哪个能用用哪个，将flushCallbacks加入微任务或宏任务队列中
+      timerFunc()
     }
+    // pending默认为false，代表此时微任务队列为空，可以添加微任务，if语句块进来pending马上变为true，意味着本轮事件循环中，不管调用多少次nextTick，只会在第一个执行timerFunc，即把flushCallbacks推入微任务队列只会发生一次，执行flushCallbacks这个微任务时，pending恢复为false
+    // timerFunc会先检测当前环境，按照Promise,MutationObserver,setImmediate,setTimeout优先级，哪个能用用哪个，将flushCallbacks加入微任务或宏任务队列中
     if (!cb && typeof Promise !== 'undefined') {// 如果调用$nextTick时没有传参
       return new Promise(resolve => { // 则$nextTick()返回一个promise实例
         _resolve = resolve;
       })
     }
   }
-  // 一轮事件循环中nextTick的第一次调用，pending为false，会执行timerFunc，将flushCallbacks注册为微任务，flushCallbacks就是将callbacks数组中的回调依次执行并清空数组，$nextTick(fn)的使用放在数据变动之后，所以nextTick(flushSchedulerQuee)要早于nextTick(fn, this)，因此在callbacks数组中，被包裹后的flushSchedulerQueue排在被包裹后的fn的前面，因此在清空执行callbacks数组时，存在执行顺序的先后
+  // 一轮事件循环中nextTick的第一次调用，pending为false，会执行timerFunc，将flushCallbacks注册为微任务，flushCallbacks就是将callbacks数组中的回调依次执行并清空数组，数据变动之后调用$nextTick(fn)，所以queueWatcher中的nextTick(flushSchedulerQueue)要早于nextTick(fn, this)，因此在callbacks数组中，flushSchedulerQueue排在fn之前，清空执行callbacks数组时，存在执行顺序的先后
   // pending的作用就是保证本轮事件循环中不管多少次调用nextTick，只要微任务flushCallbacks还没执行，就始终只执行一次timerFunc，即flushCallbacks微任务只会注册一次，不会重复地执行timerFunc，即不会重复地向微任务队列中添加flushCallbacks任务，即flushCallbacks任务只需执行一次，执行一次就能将本次事件循环所有通过nextTick注册的回调都执行一遍，包括flushSchedulerQueue
   // waiting变量控制的是什么？因为有不同watcher要入queue等待执行更新，所以queueWatcher会被多次调用，如果没有限制，就会多次调用nextTick(flushSchedulerQuee)，从而往callbacks数组中推入了多个flushSchedulerQueue回调，但flushSchedulerQueue只需要一个就好，将queue中的watcher逐个调用run方法并清空queue，做一次就好。
   // 所以waiting保证了flushSchedulerQueue方法不会重复推入callbacks，pending保证了flushCallbacks不会重复地推入微任务队列，而且waiting在flushSchedulerQueue中，queue中的watcher全部run完，恢复为false；pending在flushCallbacks中恢复为false
@@ -2135,7 +2113,7 @@
   }
 
   var componentVNodeHooks = { //组件内部的钩子函数
-    init (vnode, hydrating) { //初始化
+    init (vnode, hydrating) {
       if (//vnode的組件實例已經創建，且組件實例沒有被銷毀，且是keepAlive組件
         vnode.componentInstance &&
         !vnode.componentInstance._isDestroyed &&
@@ -2143,9 +2121,11 @@
       ) {
         var mountedNode = vnode; //
         componentVNodeHooks.prepatch(mountedNode, mountedNode);
-      } else { // 当还没创建组件实例时，vnode是没有componentInstance的，vnode.data.keepAlive也没有值，先為vnode創建组件实例，并将组件实例赋给vnode的componentInstance属性
-        var child = vnode.componentInstance = createComponentInstanceForVnode(vnode, activeInstance)// 参数activeInstance是当前正在渲染的实例
-        child.$mount(hydrating ? vnode.elm : undefined, hydrating)//组件实例调用$mount方法进行实例的挂载
+      } else { //当还没创建组件实例时，vnode是没有componentInstance的，vnode.data.keepAlive也没有值，創建组件实例，并将赋给vnode的componentInstance
+        var child = vnode.componentInstance = createComponentInstanceForVnode(
+          vnode, activeInstance // 当前正在渲染的实例
+        )//创建完子组件实例后，将子组件实例赋给vnode.componentInstance，这样，组件占位vnode和组件实例就有了联系
+        child.$mount(hydrating ? vnode.elm : undefined, hydrating)//组件实例调用$mount方法进行实例的挂载，非ssr时第一个参数为undefined而不是实际元素，意味着将执行vm._render和vm._update(调用vm.__patch__创建组件的DOM树)，但由于没有提供实际元素el，并不会将DOM树插入到父元素，插入到父元素的操作将在初始化子组件实例时完成，即initComponent和insert函数
       }
     },
 
@@ -2192,7 +2172,7 @@
   var hooksToMerge = Object.keys(componentVNodeHooks);
 
   //组件的vnode一般称之为组件占位vnode，因为该vnode在最终创建的DOM树中并不会具體對應一个DOM节点，即不会出现在DOM树里，只出现在vnode树里，内置组件和普通组件在编译过程是没有区别的，在模板编译成渲染函数的处理方式是一样的，有了渲染函数，就开始了从子组件到父组件生成组件vnode的过程，_c('xxx'...)的处理，会执行createElement生成组件vnode，不管是内置组件还是普通组件都会调用createComponent函数去创建子组件vnode
-  function createComponent(Ctor, data, context, children, tag) {
+  function createComponent (Ctor, data, context, children, tag) {
     if (isUndef(Ctor)) return
     var baseCtor = context.$options._base;
     if (isObject(Ctor)) {
@@ -2210,7 +2190,6 @@
         return createAsyncPlaceholder(asyncFactory, data, context, children, tag)
       }
     }
-
     data = data || {};
     resolveConstructorOptions(Ctor);
     if (isDef(data.model)) {
@@ -2228,56 +2207,36 @@
       data = {} // data中的其他属性被剔除，在抽象组件中它们没有意义
       if (slot) data.slot = slot
     }
-    installComponentHooks(data)//會在組件佔位的vnode的vnode.data.hook上安裝一系列組件管理鉤子函數
+    installComponentHooks(data)// 会在vnode.data.hook上安裝一系列組件管理鉤子函數
     var name = Ctor.options.name || tag;
     var vnode = new VNode(
       `vue-component-${Ctor.cid}${name ? `-${name}` : ''}`,
       data, undefined, undefined, undefined, context,
-      {
-        Ctor,
-        propsData,
-        listeners,
-        tag,
-        children
-      },
+      { Ctor, propsData, listeners, tag, children },
       asyncFactory
     )
     return vnode
   }
 
-  // 子组件
-  // var zizujian = {
-  //   created () {
-  //     console.log(this.$options.parent)
-  //   }
-  // }
-  // var vm = new Vue({
-  //     el: '#app',
-  //     components: { zizujian },
-  //     data: {
-  //         test: 1
-  //     }
-  // })
-  // 子组件其实是一个json对象，或叫组件选项对象，在父组件的components选项中注册这个子组件选项对象，Vue内部会首先以这个对象作为参数执行Vue.extend创建一个子类，然后实例化子类来创建子组件，createComponentInstanceForVnode函数的作用可以简单理解为实例化子组件，只不过这个过程是在虚拟DOM的patch算法中进行的。
+  // 为组件占位的vnode创建组件实例，parent接收activeInstance，即正在活动状态的父组件
   function createComponentInstanceForVnode(vnode, parent) {
-    var options = {
-      _isComponent: true,
-      _parentVnode: vnode,
-      parent
+    var options = {//这是创建子组件实例时传入的options对象
+      _isComponent: true,//标识创建的这个组件实例是是内部子组件
+      _parentVnode: vnode, //vnode是当前子组件的占位vnode
+      parent //创建当前子组件实例时，当前处于活动状态的父组件
     }
-    // 这是实例化子组件时的组件选项，这里的parent是createComponentInstanceForVnode函数的形参，createComponentInstanceForVnode函数是在componentVNodeHooks钩子对象的init钩子函数内调用
     var inlineTemplate = vnode.data.inlineTemplate;
     if (isDef(inlineTemplate)) {
       options.render = inlineTemplate.render;
       options.staticRenderFns = inlineTemplate.staticRenderFns;
     }
-    return new vnode.componentOptions.Ctor(options)
+    return new vnode.componentOptions.Ctor(options)//vnode.componentOptions.Ctor是在为组件创建vnode时传入的组件构造函数，该构造函数是基于Vue继承而来，混合了组件自身的选项(Ctor.options)，此外，创建实例时，也会传入options，但这个options跟跟创建根组件传入的options有些许区别
   }
 
   // 給組件的vnode.data.hook上安裝一系列組件管理的鉤子函數
   function installComponentHooks (data) {
     var hooks = data.hook || (data.hook = {}) //創建vnode.data.hook對象
-    for (var i = 0; i < hooksToMerge.length; i++) {//['init','prepatch','insert','destroy']
+    for (var i = 0; i < hooksToMerge.length; i++) {
       var key = hooksToMerge[i] //4個組件的鉤子函數的函數名
       var existing = hooks[key];
       var toMerge = componentVNodeHooks[key];//4個組件內部的鉤子函數
@@ -2983,11 +2942,12 @@
   var flushing = false;
   var index = 0;
 
-  function resetSchedulerState() { // flushSchedulerQueue中调用
-    index = queue.length = activatedChildren.length = 0; // 将index=0，即当前执行run的watcher在queue中的索引变为0，将queue变为空数组，将activatedChildren数组变为空数组
-    has = {}; // 登记入queue的watcher的has对象也置空
-    circular = {}; // 记录多次入queue的watcher的入queue次数的circular对象也置空
-    waiting = flushing = false; //waiting为false，flushSchedulerQueue可以再次通过nextTick被推入到callbacks数组中，flushing置为false，意味着queue队列执行更新完毕，flushSchedulerQueue执行完毕
+  // 重置queue相关的状态，queue队列清空，activatedChildren数组清空，index为0，即当前执行的watcher在queue的索引归零。记录入列的watcher的id的has对象也置空，记录多次入列的watcher的入列次数的circular对象也置空，变量waiting恢复为false，意味着可以执行nextTick(flushSchedulerQueue)将回调推入到callbacks数组中。flushing置为false，意味着queue执行更新完毕，即flushSchedulerQueue执行完
+  function resetSchedulerState() {
+    index = queue.length = activatedChildren.length = 0; 
+    has = {}
+    circular = {}
+    waiting = flushing = false;
   }
 
   var currentFlushTimestamp = 0;
@@ -3008,25 +2968,24 @@
     currentFlushTimestamp = getNow(); // 当前清空异步watcher队列的时间戳
     flushing = true; // 当执行flushSchedulerQueue，flushing置为true
     var watcher, id;
-    // flush之前sort一下queue的顺序，让早创建的watcher先求值
-    // 1. 确保组件的更新是从先父组件再更新子组件，因为父组件总是在子组件之前创建
-    // 2. 确保一个组件的user watcher在render watcher之前求值，因为前者创建的比较早
-    // 3. 如果一个组件在它的父组件的watcher执行时被摧毁了，这个组件的watcher就可以忽略了
-    queue.sort((a, b) => a.id - b.id);
 
-    // 不用index = queue.length;index > 0; index--的方式，不要缓存queue的长度，因为在执行现有的watcher过程中可能会有更多watcher入列
-    for (index = 0; index < queue.length; index++) { // 遍历queue
+    queue.sort((a, b) => a.id - b.id);
+    // 在执行队列中的watcher之前，先将watcher按其id从小到大排序，这是为了保证：
+    // 1. 确保组件的更新是先父组件再子组件，因为父组件总是在子组件之前创建，父组件的Watcher也是先于子组件的Watcher创建的，早创建的watcher的id因此比较小。
+    // 2. 确保一个组件的用户自定义的watcher在渲染函数的watcher之前求值，因为前者创建的比较早，initState中的initWatch时，初始化watch选项创建watcher实例，而渲染函数的watcher的创建是$mount中的mountComponent中，
+    // 3. 如果一个组件在它的父组件的watcher执行时被摧毁了，这个组件的watcher就没必要执行，可以跳过
+
+    // 遍历queue队列中所有的watcher，执行watcher的run方法，不从queue的最后一项开始遍历，因为在执行现有的watcher的过程中可能会有更多watcher入列，不希望缓存queue的长度。如果其中某个watcher有before方法，则先执行它，它其实是执行beforeUpdate钩子函数，然后再watcher的run方法。获取当前遍历的watcher的id，清楚has对象里记录入列的watcher的该id，然后执行run方法(重新求值)
+    for (index = 0; index < queue.length; index++) {
       watcher = queue[index];
-      if (watcher.before) { // 渲染函数的watcher有传before选项，属性值为一个函数
-        watcher.before(); // 在执行更新之前，调用before，执行beforeUpdate钩子函数
-      }
+      if (watcher.before) watcher.before()
       id = watcher.id;
-      has[id] = null; // 清除has对象里登记的入列的watcher的id
-      watcher.run(); // 执行更新（重新求值）
-      // 如果has中还存在当前watcher的id，说明出现循环调用update，循环调用了queueWatcher让watcher入列了
+      has[id] = null;
+      watcher.run(); 
+      // 如果清除了has对象中的该id后，它还存在该id，说明出现这种情况：循环调用update，即循环调用queueWatcher让该watcher入列了。用circular对象记录这个watcher执行update方法的次数，即记录了它入队的次数，如果超过100次，则提示：有一个无限循环的update。接着跳出queue的遍历执行。
       if (has[id] != null) {
-        circular[id] = (circular[id] || 0) + 1; // 用circular对象记录这个watcher执行update的次数
-        if (circular[id] > MAX_UPDATE_COUNT) { // 超过100次，则提示：有一个无限循环的update，跳出queue的遍历
+        circular[id] = (circular[id] || 0) + 1;
+        if (circular[id] > MAX_UPDATE_COUNT) {
           warn('You may have an 无限的update循环 ' + (watcher.user
             ? `in watcher with expression "${watcher.expression}"`
             : `in a component render function.`), watcher.vm)
@@ -3039,7 +2998,7 @@
     var activatedQueue = activatedChildren.slice();
     var updatedQueue = queue.slice(); //updatedQueue存一份已经更新过的queue
 
-    resetSchedulerState(); // 对queue相关的变量重置，比如queue变回空数组等
+    resetSchedulerState(); // 对queue相关的变量重置
 
     for (var i = 0; i < activatedQueue.length; i++) {
       activatedQueue[i]._inactive = true;
@@ -3048,12 +3007,13 @@
 
     var i = updatedQueue.length;
     while (i--) {
-      const watcher = updatedQueue[i]; //遍历已更新的queue中的watcher
-      const vm = watcher.vm; // 这些watcher的vm属性，如果它们的_watcher就是watcher，说明是渲染函数的watcher，即组件的watcher，且实例挂载好了且没有销毁，现在watcher已经run更新了，调用updated钩子函数
+      const watcher = updatedQueue[i];
+      const vm = watcher.vm
       if (vm._watcher === watcher && vm._isMounted && !vm._isDestroyed) {
         callHook(vm, 'updated');
       }
     }
+    // 遍历已执行更新的queue中的watcher，获取watcher的vm属性，即该watcher所在的组件实例vm，如果queue中的watcher存在某一个是当前组件的渲染函数的watcher。而且实例挂载好了且没有销毁，所以当前组件的渲染函数的watcher也run完了，执行更新完毕，该调用updated钩子函数
 
     // devtool hook
     if (devtools && config.devtools) {
@@ -3066,46 +3026,48 @@
     activatedChildren.push(vm);
   }
 
-  //watcher监听的数据变化->setter->dep notify->watcher update->queueWatcher。传入的watcher被push进队列queue，调用nextTick注册一个微任务flushSchedulerQueue，用来清空执行queue中的watcher
+  //watcher监听的数据变化->setter->dep notify->watcher update->queueWatcher。watcher被push进队列queue，调用nextTick注册一个微任务flushSchedulerQueue，用来清空执行queue中的watcher
   function queueWatcher (watcher) {
-    var id = watcher.id; // 获取watcher的唯一id
-    if (has[id] == null) {//has对象记录已经入列的watcher，相同的watcher会被跳过，避免watcher重复入列
-      has[id] = true; //比方有多个数据发生变化，但它们有一个共同的watcher，就不用多次对它run重新求值
-      if (!flushing) { // 如果没有正在执行更新（flushQueue），将watcher简单地push到queue队尾
-        queue.push(watcher);
-      } else { // 队列在执行更新的过程中，实际上还是会有watcher入列的，比如计算属性，队列执行更新时经常会执行渲染函数watcher的更新，渲染函数中可能存在计算属性，由于计算属性的独特的实现方式，当触发计算属性的get函数时会有观察者入队的行为（这里我没懂）。watcher入队需要考虑插入的位置
-        var i = queue.length - 1; // 队尾开始遍历，index是当前正在执行的watcher在queue中的索引
-        while (i > index && queue[i].id > watcher.id) {
-          i--; // 从后往前找，遇到id比我大的，说明我应该更早被执行，前挪i--，直到找到id比我小的。待插入的watcher就插在它后面，或者i已经前挪到当前执行的watcher的前面了，插入到i+1，下一个就执行我。
-        }
-        queue.splice(i + 1, 0, watcher); // 我指的是待插入queue的watcher
+    var id = watcher.id
+    if (has[id]) return
+    has[id] = true
+    // watcher有唯一的id，has对象利用id记录已经入queue的watcher，比方有多个数据都发生了变化，它们有一个共同的watcher，就会出现queueWatcher让同一个watcher入列，会直接返回，避免了watcher重复入列，不用多次对它执行run重新求值
+    if (!flushing) {
+      queue.push(watcher);
+    } else { // 队列在执行更新的过程中，为什么会有watcher入列？(这里我没懂)
+      var i = queue.length - 1; 
+      while (i > index && queue[i].id > watcher.id) {
+        i--; 
       }
-      if (!waiting) { // waiting默认false，首次执行queueWatcher会进入if语句，进来马上true，在变为false之前再调用queueWatcher也不会进入if语句，这保证了nextTick(flushSchedulerqueue)只执行一次，即flushSchedulerqueue只会被推入callbacks数组中一次。等到flushSchedulerQueue执行完，即queue中的watcher执行并清空完，waiting才变为false
-        waiting = true;
-        if (!config.async) { // 代表同步执行更新，立即调用flushSchedulerQueue执行并清空队列
-          flushSchedulerQueue(); // flushSchedulerQueue函数的作用之一就是用来将队列中的watcher统一执行更新
-          return
-        }
-        nextTick(flushSchedulerQueue); // nextTick把flushSchedulerQueue包装成一个新函数然后推入callbacks数组中，而且只需要推入callbacks一次，靠的waiting变量。
-      }
+      queue.splice(i + 1, 0, watcher)
     }
+    // flushing代表是否正在执行flushQueue，如果它为false，即没有正在执行更新，待入列的watcher直接push到queue队尾即可；相反，如果队列正在执行更新，此时还是可能会有watcher入列，入列的watcher需要考虑插入的位置，从队尾开始遍历，index是当前正在执行的watcher在queue中的索引，从后往前，遇到id比待插入的watcher的id大的，就将i--，前挪，直到遇到id比待插入的watcher的id小的，那就插入在它后面。或者i已经减小到比index小了，即已经前挪到当前执行的watcher的前面了，那就插入到i+1，下一个就执行插入的这个watcher
+    if (!waiting) {
+      waiting = true;
+      if (!config.async) { // 同步执行更新
+        flushSchedulerQueue() // 立即调用flushSchedulerQueue执行并清空队列
+        return
+      }
+      nextTick(flushSchedulerQueue); 
+    }
+    // waiting默认为false，首次执行queueWatcher会进入if语句，但进来马上变true，所以在变回false之前不管怎么调用queueWatcher也不会进入if语句，这保证了nextTick(flushSchedulerqueue)只执行一次，即flushSchedulerqueue只会被推入callbacks数组一次。等到flushSchedulerQueue执行完，即queue中的watcher执行更新并清空完，waiting才恢复为false
+    // nextTick把flushSchedulerQueue包成一个新函数然后推入callbacks数组中，由于waiting，它只会被推入一次，nextTick还会将flushCallback注册到微任务队列中
   }
 
   var uid$2 = 0;
   class Watcher {
-    constructor(vm, /*组件实例*/ expOrFn, /*要观察的目标*/ cb, /*当被观察的目标的值变化时的回调函数*/ options, /*一些传递给当前观察者对象的选项*/ isRenderWatcher /*观察的是否是渲染函数*/) {
+    constructor(vm, expOrFn, /*被观察的目标*/ cb, /*当被观察的目标的值变化时的回调函数*/ options, /*创建watcher实例的选项*/ isRenderWatcher /*观察的是否是渲染函数*/) {
       this.vm = vm // 每个watcher都有一个vm实例属性，代表该watcher属于哪个组件
-      if (isRenderWatcher) { //如果isRenderWatcher是真，说明创建的是渲染函数的watcher，属于组件级别的
-        vm._watcher = this // 把当前的渲染函数的watcher赋给vm._watcher，它会监听组件内所有的状态。
+      if (isRenderWatcher) { //如果创建的是渲染函数的watcher(属于组件级别的)
+        vm._watcher = this // 把当前watcher赋给vm._watcher，它会监听组件内所有的状态
       }
-      vm._watchers.push(this) //vm._watchers数组存放当前组件的所有watcher，包括渲染函数的和非渲染函数的watcher
+      vm._watchers.push(this) //vm._watchers数组存放当前组件的所有watcher
       if (options) {
         this.deep = !!options.deep; //是否深度观测对象内部值的变化，使用watch选项或调用$watch可以指定deep的真假
         this.user = !!options.user; //除了渲染函数的watcher和计算属性的watcher是Vue内部创建的，其他都是开发者定义的
-        this.lazy = !!options.lazy; //是否是计算属性的watcher。它是Vue内部在实现计算属性时创建的watcher，并非指观察某个计算属性的watcher
-        this.sync = !!options.sync; //当数据变化时是否同步求值并执行回调。默认false，异步执行
-        // 将需要重新求值并执行回调的观察者放到一个异步队列中，当所有数据的变化结束之后统一求值并执行回调
-        this.before = options.before; // watcher的before属性值是执行beforeUpdate的函数，调用时机在数据变化之后，触发更新之前。
+        this.lazy = !!options.lazy //是否是计算属性的watcher。它是Vue内部在实现计算属性时创建的watcher，并非指观察某个计算属性的watcher
+        this.sync = !!options.sync //当数据变化时是否同步求值并执行回调。默认为false
+        this.before = options.before // watcher的before属性值是执行beforeUpdate的函数，调用时机在数据变化之后，触发更新之前
       } else {
         this.deep = this.user = this.lazy = this.sync = false;
       }
@@ -3149,7 +3111,7 @@
         if (this.deep) {
           traverse(value)// 递归地读取expOrFn值的所有子属性的值，这样所有子属性都会收集到同一个watcher
         }
-        popTarget();
+        popTarget() // 求值完后，Dep.target恢复为原来的watcher
         this.cleanupDeps(); // 每次求值之后，调用cleanupDeps方法
       }
       return value
@@ -3188,9 +3150,9 @@
     update() { //数据属性的set被触发时，它的dep调用notify，dep中所有的watcher都调用update
       if (this.lazy) { // 如果是计算属性的watcher，计算属性依赖的数据变化时，它们的set被触发，把dep存的watcher都执行update，其中包括了计算属性watcher，不会马上求值，只是将dirty置为true
         this.dirty = true; // 代表未来读取到计算属性时要重新求值，而不是使用缓存值
-      } else if (this.sync) { //如果snyc为真，即变化发生后是同步更新变化，直接调用run()
-        this.run();
-      } else { // 不是立即调用run求值，而是将当前watcher推入一个队列中等待执行
+      } else if (this.sync) { //如果snyc为真，依赖项发生改变，update执行直接调用run()
+        this.run(); //立即计算被观察的目标的值
+      } else { // 不是立即调用run求值，而是将当前watcher推入一个队列中等待下一次tick时重新求值
         queueWatcher(this);
       } // 渲染函数的watcher的创建时没有传snyc，snyc默认为false，因此执行queueWatcher
     };
@@ -3262,23 +3224,19 @@
   function initState (vm) {
     vm._watchers = [] // 记录vm实例的所有watcher，包括渲染函数的和非渲染函数的
     var opts = vm.$options
-    if (opts.props) {
+    if (opts.props)
       initProps(vm, opts.props); // 初始化props，opts.props是经过规范化后的
-    }
-    if (opts.methods) {
+    if (opts.methods)
       initMethods(vm, opts.methods); // 初始化methods
-    }
     if (opts.data) { // 如果有data，初始化data
       initData(vm);
     } else { //如果开发者没有传data选项，则将{}赋给vm._data，对它进行观测
       observe(vm._data = {}, true/*根data*/) // 根data是一个空对象
     }
-    if (opts.computed) {
+    if (opts.computed)
       initComputed(vm, opts.computed); // 初始化computed
-    }
-    if (opts.watch) {
+    if (opts.watch)
       initWatch(vm, opts.watch);// 初始化watch
-    }
   }
 
   function initProps(vm, propsOptions) { // propsOptions是规范化后的props选项对象
@@ -3313,23 +3271,19 @@
   }
 
   /**initData做了哪些事情：
-   * 通过vm.$options.data（此时是函数）获取真正的数据
+   * 通过vm.$options.data获取真正的数据
    * 检查得到的数据是否是纯对象
    * 检查data上的key是否和props对象上的有命名冲突，props优先
    * 检查methods对象上的key是否和data对象上的key冲突，data优先
    * 在Vue实例上添加代理访问数据对象的同名的访问器属性
    * 最后调用observe 开始响应式处理之路 */
-  function initData (vm) {
-    var data = vm.$options.data; // 引用vm.$options.data
-    // 其实经过mergeOptions后，data一定是函数了，下面还要作判断，因为在mergeOptions之后、initData之前有一个beforeCreate钩子，如果开发者在beforeCreate中修改了data的值，所以在initData中对data作类型判断就有必要了
-    data = vm._data = typeof data === 'function' ?
-      getData(data, vm) : data || {};
-    //如果data是函数，执行函数拿到最终数据，不是函数则用它本身，如果它是空值，则用一个空对象，赋给vm._data属性，同时重写了data变量
-    if (!isPlainObject(data)) {
-      data = {}; //data选项是开发者编写的，可能不是返回对象
+  function initData(vm) {
+    var data = vm.$options.data; //获取真正的数据，经过mergeOptions后，data已经是函数，下面却还要作判断，因为在mergeOptions之后、initData之前有一个beforeCreate钩子，用户可能会在beforeCreate中修改data的值，所以在initData中要对data作类型判断
+    data = vm._data = typeof data === 'function' ? getData(data, vm) : data || {} //如果data是函数，执行getData的结果赋给vm._data，如果不是函数则将data本身赋给vm._data，如果data为空，则用赋给vm._data属性一个{}
+    if (!isPlainObject(data)) { //data选项是用户编写的，可能不是纯对象
+      data = {}; //如果不是纯对象，覆盖为一个空对象，并警告
       warn('data必须返回一个对象，不能返回别的类型', vm);
     }
-    // 把 data 代理到实例 vm 上，之后 data 的数据可以直接通过 this 来获取或设置
     var keys = Object.keys(data); // 获取data对象的所有key
     var props = vm.$options.props;
     var methods = vm.$options.methods;
@@ -3337,16 +3291,15 @@
     while (i--) { // 遍历keys数组
       var key = keys[i];
       if (methods && hasOwn(methods, key)) {
-        warn((`method中定义了和data中同名的${key}，要换名，因为它们都可以通过实例代理访问，当命名冲突时，会产生覆盖的现象`), vm);
+        warn((`method中定义了和data中同名的${key}，它们都可以通过实例代理访问，命名冲突会产生覆盖的现象`), vm);
       }
       if (props && hasOwn(props, key)) {
         warn("prop中已经有了" + key + "这个定义", vm);
-        
-      } else if (!isReservedKeyword(key)) { // key不是保留关键字
-        proxy(vm, "_data", key); // 前面已经知道最终的data对象已经赋给了vm._data，现在要实现vm的代理访问。原理是通过Object.defineProperty在vm实例上定义和data数据字段同名的访问器属性，并且这些属性代理的值是vm._data上对应的属性的值，即访问vm.xxx时，实际是访问vm._data.xxx，修改vm.xxx的值时，实际也是修改vm._data.xxx，vm._data才是真正的数据对象
+      } else if (!isReservedKeyword(key)) { // 如果key不是保留关键字，将data中的key代理到实例vm上，之后data的数据可以通过this来获取或设置
+        proxy(vm, "_data", key); // 真正的data对象赋给了vm._data，实现vm的代理访问是通过Object.defineProperty在vm实例上定义和data数据字段同名的访问器属性，并且这些属性代理的值是vm._data上对应的属性的值，即访问vm.xxx时，实际是访问vm._data.xxx，修改vm.xxx的值时，实际也是修改vm._data.xxx
       }
     }
-    observe(data, true /*根data*/); // 这里才是观测data的开始
+    observe(data, true/*根data*/) // 观测data的开始：为data调用observe创建watcher实例，data内数据变化时，依赖于该数据的watcher就会接收到通知，从而重新计算watcher表达式的值
   }
 
   function getData(data, vm) { 
@@ -3361,37 +3314,37 @@
     }
   }
 
-  // 初始化computed，其实就是创建lazy的watcher，注意到computed有两种写法，一种是函数，一种是对象，里面有get方法和set方法（可选）
+  // 初始化computed，其实就是给computed选项对象中每个计算属性创建lazy: true的watcher实例
+  // 注意到computed有两种写法，一种是函数，一种是对象，对象里有get方法和set方法(可选)
   function initComputed(vm, computed) {
     var watchers = vm._computedWatchers = Object.create(null); // 共同引用一个空对象
-    var isSSR = isServerRendering(); // 判断是否是服务端渲染的标识
+    var isSSR = isServerRendering(); // 是否是服务端渲染的标识
     for (var key in computed) { // 遍历computed选项对象
       var userDef = computed[key]; // key对应的用户定义的属性值
       var getter = typeof userDef === 'function' ? userDef : userDef.get; //取到getter方法
       if (getter == null) { // getter不存在的话，提示计算属性没有对应的getter
-        warn(("Getter is missing for computed property \"" + key + "\"."), vm);
+        warn(("你没有传入计算属性的Getteris\"" + key + "\"."), vm);
       }
-      if (!isSSR) { // 不是ssr就需要创建watcher实例；计算属性在ssr中，只是一个普通的getter
+      if (!isSSR) { // 不是ssr就需要创建watcher实例；如果是ssr，计算属性只是一个普通的getter
         watchers[key] = new Watcher(vm, getter || noop, noop, { lazy: true });
-        // 把创建的计算属性的watcher添加到watchers/vm._computedWatchers对象中，key是用户定义的计算属性的名字，属性值是对应的watcher实例
-        // 第二个参数是用户设置的计算属性的get函数，lazy:true代表该watcher是computed的watcher
+        // 把创建的计算属性的watcher添加到watchers/vm._computedWatchers对象中，key是计算属性的名字，属性值是对应的watcher实例。第二个参数expOrFn被观察的目标，是用户设置的计算属性的get函数，lazy:true代表该watcher是计算属性的watcher
       }
       if (!(key in vm)) { // 如果计算属性名在vm实例中没有定义，则在vm上定义计算属性
         defineComputed(vm, key, userDef);
       } else {// 计算属性名已经存在于vm，和data中的和props中的重名都要做出警告
         if (key in vm.$data) { 
-          warn(`The computed property "${key}" is already defined in data.`, vm)
+          warn(`该计算属性名"${key}"已经在data中有定义了`, vm)
         } else if (vm.$options.props && key in vm.$options.props) { 
-          warn(`The computed property "${key}" is already defined as a prop.`, vm)
+          warn(`该计算属性名"${key}"已经在props中定义为一个prop了`, vm)
         }
-        // 有可能和methods里的同名，不会报警但不会在vm上定义计算属性，即它会悄悄失效
+        // 有可能和methods里的同名，不会报警，但也不会在vm上定义计算属性，即它会悄悄失效
       }
     }
   }
 
   // 用Object.defineProperty在vm实例上定义计算属性，首先就要找齐get和set函数
   function defineComputed (target, key, userDef) {
-    var shouldCache = !isServerRendering() //非服务端渲染下，计算属性才有缓存值，即服务端渲染下，计算属性只是一个普通的getter，不会利用缓存值，下面只分析非ssr的情况
+    var shouldCache = !isServerRendering() //非ssr下，计算属性才有缓存值；ssr下，计算属性只是一个普通的getter，不会利用缓存值，下面只分析非ssr的情况
     if (typeof userDef === 'function') {
       // 如果用户定义的是函数，调用createComputedGetter函数，生成计算属性的get函数
       sharedPropertyDefinition.get = shouldCache
@@ -3411,34 +3364,35 @@
         warn(`你正在修改计算属性，但你没有给计算属性"${key}"设置setter`, this)
       };
     }
-    // 无论userDef是函数/对象，非srr下，计算属性的get都是createComputedGetter(key)产生
+    // 无论userDef是函数/对象，非srr下，计算属性的get函数都是createComputedGetter(key)产生
     Object.defineProperty(target, key, sharedPropertyDefinition); //在vm实例上定义和计算属性同名的属性
   }
 
-  // 计算属性的getter的生成函数，传入计算属性名key
-  function createComputedGetter(key) {
+  // 计算属性的getter函数的生成函数，传入计算属性名key
+  function createComputedGetter(key) { //返回computedGetter函数
     return function computedGetter() { // 每次计算属性被读取时，这个函数就被执行
-      var watcher = this._computedWatchers && this._computedWatchers[key];// watcher取到计算属性key的watcher实例
-      if (watcher) { // ssr情况下，不会给计算属性创建watcher实例，所以存在不存在watcher的情况
-        if (watcher.dirty) { // watcher的dirty为真（有脏值），计算属性重新求值，更新watcher.value
-          watcher.evaluate(); // 注意evaluate执行的前提是计算属性的get被触发，即被读取时
+      var watcher = this._computedWatchers && this._computedWatchers[key] // 获取计算属性key的watcher实例
+      if (watcher) { // ssr情况下，不会给计算属性创建watcher实例，所以是有可能没有watcher的
+        if (watcher.dirty) { // 如果watcher的dirty为真，通过执行watcher的evaluate方法对计算属性重新求值，更新watcher.value
+          watcher.evaluate(); //注意，evaluate只在计算属性的get被触发时执行，别的情况不会执行它
         }
-        if (Dep.target) { 
+        if (Dep.target) {
           watcher.depend();
         }
-        return watcher.value
+        return watcher.value // 计算属性的读取，getter函数返回watcher.value
+
         // 假如模版里只使用一个计算属性，看似组件的watcher(渲染函数的watcher)监听的是计算属性，但你修改计算属性依赖的一个数据，模版会重新渲染，这是为啥？
-        // 计算属性的watcher在创建时，不会立即执行this.get()，即没有立即求值，它是惰性求值的watcher
-        // 计算属性还没被首次读取时，watcher的dirty是true。因为没有求值，计算属性它依赖的所有数据也没有收集依赖。
-        // 当计算属性被读取时(可能是被模版引用了，然后在渲染函数执行时被读取，也可能是用户自定义的watcher中对计算属性求值，我们拿渲染函数中读取计算属性来举例)，计算属性的get被触发。此时dirty为true，所以会调用watcher的evaluate方法，对计算属性进行求值，并把dirty改为false。
-        // 计算属性求值即this.get()的过程中，前后调用了pushTarget和popTarget，因此这过程中Dep.target是计算属性的watcher。计算属性求值意味着计算属性依赖的所有数据也求值了，这些数据的get被触发，收集了计算属性的watcher，同时计算属性的watcher也把这些数据的dep实例收集到自己的deps数组中。
-        // 计算属性求值即this.get()结束后，Dep.target不再是计算属性的watcher，而是读取计算属性的渲染函数的watcher。接下来调用watcher.depend，即计算属性的watcher的deps数组中所有dep实例调用depend，收集依赖，收集的就是渲染函数的watcher，而不是计算属性的watcher。
+        // 计算属性的watcher是惰性求值的，它在创建时，不会立即执行this.get()，即没有立即求值
+        // 计算属性还没被首次读取时，它的watcher的dirty是true。并且因为没有求值，计算属性它依赖的所有数据也没有收集依赖。
+        // 当计算属性被读取时(可能是被模版使用了，然后在渲染函数执行时被读取，也可能是用户自定义的watcher中对计算属性求值，我们拿渲染函数中读取计算属性来举例)，计算属性的get方法被触发。此时dirty为true，所以会调用watcher的evaluate方法，对计算属性进行求值，把值赋给了watcher.value，并把dirty改为false。
+        // 计算属性求值，即this.get()的过程中，前后调用了pushTarget和popTarget，在这之间Dep.target是计算属性的watcher。计算属性求值意味着计算属性依赖的所有数据也求值了，这些数据的get被触发，收集的是计算属性的watcher，同时计算属性的watcher也把这些数据的dep实例收集到自己的deps属性数组中。
+        // 计算属性求值，即this.get()中执行了popTarget后，Dep.target不再是计算属性的watcher，而是恢复为读取计算属性的渲染函数的watcher。接下来调用watcher.depend，即计算属性的watcher的deps数组中存放的所有dep实例调用depend，收集依赖，收集的是渲染函数的watcher，而不是计算属性的watcher
         // 现在计算属性依赖的所有数据的dep实例就收集了计算属性的watcher和渲染函数的watcher了。这些数据的改变的话，会触发计算属性的watcher改dirty值和组件的重新渲染。
         // 接下来有几种情况：1.计算属性依赖的数据没变，但是重渲染要读取计算属性，此时计算属性的watcher的dirty是false，不会执行evaluate，即不会对计算属性再次求值，而是返回watcher.value，即之前存的缓存值
-        // 2.计算属性依赖的数据变化了，这些数据的dep存放了计算属性的watcher和渲染函数的watcher，数据的修改触发了它们的set，触发了watcher的update方法，计算属性的watcher执行update只是将dirty改为true。渲染函数的watcher执行update，触发重新渲染。
-        // 而重新渲染会执行渲染函数，必然会读取计算属性，触发了计算属性的get，此时dirty为true，便会执行watcher的evaluate方法，对计算属性重新求值，并把dirty改为false。注意这时是计算属性的第二次求值，计算属性依赖的所有数据的dep不会收集重复的依赖
+        // 2.计算属性依赖的数据变化了，这些数据的dep存放了计算属性的watcher和渲染函数的watcher，数据的修改触发了数据的set方法，数据的dep实例调用notify方法，遍历dep实例中存的所有watcher，逐个调用watcher的update方法，对于计算属性的watcher执行update只是将dirty改为true。对于渲染函数的watcher执行update，触发重新渲染。
+        // 而重新渲染会执行渲染函数，必然会再次读取计算属性，触发计算属性的get函数，此时dirty为true，便会执行watcher的evaluate方法，对计算属性重新求值，并把dirty改为false。注意这时是计算属性的第二次求值，计算属性依赖的所有数据的dep实例不会收集重复的依赖，因为多次求值并不会让数据的dep实例收集重复的watcher
         // 如此往复，重复上面1和2的过程，以上就解释了，为什么即使模版使用了只是一个计算属性，你修改计算属性依赖的一个数据，也会触发渲染函数重新渲染。
-        // 所以说，组件的watcher或者叫渲染函数的watcher，它不是观察计算属性的变化，而是观察计算属性中所依赖的所有数据的变化。这些数据的变化触发渲染函数的watcher执行update做重渲染，重渲染通过读取计算属性，触发计算属性的get，再根据dirty决定返回缓存值还是重新计算计算属性
+        // 所以说，组件的watcher或者叫渲染函数的watcher，它不是观察计算属性的变化，而是观察计算属性中所依赖的所有数据的变化。这些数据的变化触发计算属性的watcher改变dirty值为true，并且触发渲染函数的watcher执行update做重渲染，重渲染通过读取计算属性，触发计算属性的get，再根据dirty决定返回缓存值还是重新计算计算属性
       }
     }
   }
@@ -3467,26 +3421,26 @@
     }
   }
 
-  // watch选项对象的key是需要观察的表达式，值是对应的回调函数，或method名或包含选项的对象，甚至是多个回调函数组成的数组。
-  function initWatch(vm, watch) {
-    for (var key in watch) {
-      var handler = watch[key]; 
-      if (Array.isArray(handler)) {// watch[key]如果是数组，遍历数组逐个调用createWatcher
+  // 对watch选项进行初始化
+  function initWatch(vm, watch) {//
+    for (var key in watch) { // key是需要观察的表达式
+      var handler = watch[key]; //对应的回调函数/method/包含handler的对象/多个handler组成的数组 
+      if (Array.isArray(handler)) {//如果handler是数组，遍历数组逐个调用createWatcher
         handler.forEach(fn => { createWatcher(vm, key, fn) })
       } else {
         createWatcher(vm, key, handler);
       }
     }
   }
-
+  // 为watch选项中的每个需要被观察的表达式创建watcher实例，接收的handler有几种可能：包含回调函数的对象/回调函数/字符串(method名)
   function createWatcher(vm, expOrFn, handler, options) {
     if (isPlainObject(handler)) { //如果handler是纯对象
       options = handler; // 赋给options
       handler = handler.handler; // handler属性值赋给handler
     }
     if (typeof handler === 'string') { //如果handler是字符串
-      handler = vm[handler] // 说明它是method，从vm中取出
-    } //剩下就是handler是函数，直接调用vm.$watch
+      handler = vm[handler] // 说明它是method，从vm中取出函数
+    } // 现在handler就是函数了，直接调用vm.$watch，但$watch的定义中还要判断第二个函数是函数或对象，因为$watch不单只在这被调用，还暴露给用户使用，用户可能给第二个参数传入一个对象
     return vm.$watch(expOrFn, handler, options)
   }
 
@@ -3507,24 +3461,24 @@
 
     Vue.prototype.$set = set; Vue.prototype.$delete = del
 
-    // $watch函数是对new Watcher的封装，加入了控制项immediate和deep，既在Vue内部使用又暴露给用户使用。vm.$watch('a.b.c',(newVal,oldVal)=>{})或vm.$watch(()=>this.a+this.b,(newVal,oldVal)=>{})，后者this.a+this.b每次能得出一个不同的结果时，处理函数都会被调用。就像监听一个未被定义的计算属性
+    // $watch函数是对new Watcher的封装，只是加入了控制项immediate和deep，既在Vue内部使用又暴露给用户使用。vm.$watch('a.b.c',(newVal,oldVal)=>{})或vm.$watch(()=>this.a+this.b,(newVal,oldVal)=>{})，后者this.a+this.b每次能得出一个不同的结果时，即a或b的值变化，处理函数都会被调用。就像监听一个未被定义的计算属性
     Vue.prototype.$watch = function (expOrFn, cb, options) {//expOrFn只接收点分割的的路径，或一个computed函数。cb接收回调或包含回调的对象，回调在被观测的目标变化后执行，回调接收的参数为新值和旧值
       var vm = this;
-      if (isPlainObject(cb)) { // 如果第二个参数传的是纯对象，调用createWatcher进行余下的逻辑
+      if (isPlainObject(cb)) { // 如果第二个参数传的是纯对象，因为createWatcher中会对是对象的情况进行归一化处理，所以调用createWatcher讲参数归一化后，会再调用$watch
         return createWatcher(vm, expOrFn, cb, options)
       }
       options = options || {}; // 如果没有传第三个参数，会默认options为一个空对象
-      options.user = true; // 自动设为true，因为这是开发者自己定义的watcher
+      options.user = true // 自动设为true，因为无论是watch选项定义的，还是用户调用$watch定义的，都是用户自己定义的watcher
       var watcher = new Watcher(vm, expOrFn, cb, options); // 创建watcher实例
-      if (options.immediate) {//immediate:true，$watch调用时要立即以expOrFn的当前值触发cb回调
-        try { // 刚刚的new Watcher时，对expOrFn进行了一次求值。
-          cb.call(vm, watcher.value) // 创建watcher后立即执行cb，此时只有新值
-        } catch (err) {
-          handleError(err, vm, `callback for immediate watcher"${watcher.expression}"`)
+      if (options.immediate) {//immediate:true代表$watch调用时要立即触发cb回调
+        try { // 而cb的执行会传入expOrFn的新值和旧值，刚刚的new Watcher时，对expOrFn进行了一次求值，此时只有新值
+          cb.call(vm, watcher.value) //new Watcher时执行watcher的get方法，返回值赋给了watcher.value
+        } catch (err) { // cb是用户自己编写的，它的执行可能会有不可预知的错误
+          handleError(err, vm, `立即执行的watcher的回调"${watcher.expression}"出现了错误`)
         }
       }
-      return () => { //$watch返回一个函数，函数执行会调用watcher的teardown
-        watcher.teardown() // 解除当前watcher对expOrFn的观察
+      return () => { //$watch返回一个函数，函数执行会调用watcher的teardown方法
+        watcher.teardown() // teardown方法做的是解除当前watcher对expOrFn的观察
       }
     }
   }
@@ -3535,9 +3489,9 @@
       var vm = this;
       vm._uid = uid$3++
       vm._isVue = true; //标识是Vue实例而不是普通的对象，避免被观测 
-      if (options && options._isComponent) { // 如果当前Vue实例是组件
+      if (options && options._isComponent) { //_isComponent表明是内部子组件
         initInternalComponent(vm, options) // 主要为vm.$options添加一些属性
-      } else { // 当前Vue实例不是组件，调用mergeOptions方法
+      } else { //当前Vue实例不是组件，调用mergeOptions方法
         vm.$options = mergeOptions(
           resolveConstructorOptions(vm.constructor),//解析constructor上的options属性
           options || {},
@@ -4057,16 +4011,14 @@
   var isTextInputType = makeMap('text,number,password,search,email,tel,url');
 
   function query (el) {
-    if (typeof el === 'string') { // 如果el是字符串，则获取并返回对应的元素对象
-      var selected = document.querySelector(el);
-      if (!selected) {
+    if (typeof el === 'string') { // 如果el是字符串，则获取并返回对应的元素
+      var selected = document.querySelector(el)
+      if (!selected) { // 获取不到对应的元素
         warn('找不到元素' + el);
-        return document.createElement('div') // 获取不到DOM元素，则创建并返回一个div元素
+        return document.createElement('div') // 创建并返回一个div元素
       }
-      return selected
-    } else { // 如果不是字符串，则默认是一个DOM对象，直接返回el
-      return el
-    }
+      return selected // 返回document的子元素中和el匹配的第一个元素
+    } else { return el }// 如果不是字符串，则默认是一个DOM对象，直接返回el
   }
 
   function createElement$1 (tagName, vnode) {
@@ -4077,65 +4029,29 @@
     }
     return elm
   }
-
-  function createElementNS (namespace, tagName) {
-    return document.createElementNS(namespaceMap[namespace], tagName)
-  }
-
-  function createTextNode (text) {
-    return document.createTextNode(text)
-  }
-
-  function createComment (text) {
-    return document.createComment(text)
-  }
-
-  function insertBefore (parentNode, newNode, referenceNode) {
+  const createElementNS = (namespace, tagName) => document.createElementNS(namespaceMap[namespace], tagName)
+  const createTextNode = text => document.createTextNode(text)
+  const createComment = text => document.createComment(text)
+  function insertBefore(parentNode, newNode, referenceNode) {//在参考节点之前插入一个拥有指定父节点的子节点，如果给给定的子节点是对文档中现有节点的引用，则会将它从当前位置挪动到新位置
     parentNode.insertBefore(newNode, referenceNode);
   }
-
-  function removeChild (node, child) { // 移除父节点的指定子节点，原生
+  function removeChild (node, child) { // 移除父节点的指定子节点
     node.removeChild(child);
   }
-
   function appendChild (node, child) {
     node.appendChild(child);
   }
-
-  function parentNode (node) { // 返回一个原生DOM节点的父节点
-    return node.parentNode
-  }
-
-  function nextSibling (node) {
-    return node.nextSibling
-  }
-
-  function tagName (node) {
-    return node.tagName
-  }
-
+  const parentNode = node => node.parentNode // 返回一个原生DOM节点的父节点
+  const nextSibling = node => node.nextSibling
+  const tagName = node => node.tagName
   function setTextContent (node, text) {
     node.textContent = text;
   }
-
   function setStyleScope (node, scopeId) {
     node.setAttribute(scopeId, '');
   }
 
-  var nodeOps = /*#__PURE__*/Object.freeze({
-    createElement: createElement$1,
-    createElementNS,
-    createTextNode,
-    createComment,
-    insertBefore,
-    removeChild,
-    appendChild,
-    parentNode,
-    nextSibling,
-    tagName,
-    setTextContent,
-    setStyleScope
-  });
+  var nodeOps = Object.freeze({ createElement: createElement$1, createElementNS, createTextNode, createComment, insertBefore, removeChild, appendChild, parentNode, nextSibling, tagName, setTextContent, setStyleScope })
 
   var ref = {
     create(_, vnode) { 
@@ -4219,7 +4135,6 @@
   function createPatchFunction({ nodeOps, modules }) {
     var i, j;
     var cbs = {};
-
     for (i = 0; i < hooks.length; ++i) { //遍历hooks
       cbs[hooks[i]] = []; //在cbs对象中为每个hook创建一个数组
       for (j = 0; j < modules.length; ++j) { //遍历modules
@@ -4310,43 +4225,38 @@
         insert(parentElm, vnode.elm, refElm);//创建文本节点然后插入到DOM
       }
     }
-    // 这个createComponent和另一个createComponent不同，之前那个是创建组件的vnode。這個是根據组件占位VNode创建组件实例以及创建整个组件的DOM樹，如果parentElm存在，插入到父元素上。對於非組件佔位vnode將不做任何操作，返回undefined
+    //该createComponent区别于另一个createComponent，那个是创建组件的vnode。這個是根據组件占位VNode创建组件实例和整个组件的DOM樹，如果parentElm存在，插入到父元素。對於非組件佔位vnode將不做任何操作，返回undefined
     function createComponent(vnode, insertedVnodeQueue, parentElm, refElm) {
-      // 若传入的 VNode 是组件占位 VNode，则将存在vnode.data.hook.init()钩子，调用init钩子后，将为组件占位 VNode 创建组件实例vnode.componentInstance。因此针对组件占位 VNode，createComponent函数最终将返回true，以表明该传入的 VNode 是组件占位 VNode，并完成了组件实例的创建工作。
-      // 反之，若传入的 VNode 不是组件占位 VNode，则不会存在vnode.data.hook.init()钩子，更加不会创建出组件实例vnode.componentInstance，因此最终createComponent函数将返回undefined，createElm函数将继续往下执行，为非组件占位 VNode 创建对应的 DOM 节点。
-
       var i = vnode.data
-      if (isDef(i)) { //isReactivated 是否需要重新激活(是否缓存)
-        var isReactivated = isDef(vnode.componentInstance) && i.keepAlive //是组件且是keepAlive组件
-        if (isDef(i = i.hook) && isDef(i = i.init)) {
-          i(vnode, false) //执行组件初始化的内部钩子init
-        }
-        if (isDef(vnode.componentInstance)) {
-          initComponent(vnode, insertedVnodeQueue);//传入组件vnode初始化component
-          insert(parentElm, vnode.elm, refElm); // 插入到真实的DOM中
+      if (isDef(i)) {
+        var isReactivated = isDef(vnode.componentInstance) && i.keepAlive//isReactivated为真代表vnode的组件实例已经创建且是且是keepAlive组件
+        if (isDef(i = i.hook) && isDef(i = i.init)) i(vnode, false) //如果存在vnode.data.hook.init钩子，则传入的vnode是组件占位vnode，调用钩子init，创建组件实例vnode.componentInstance，因此下面if条件成立，函数返回true，此时vnode已经完成组件实例的创建
+        if (isDef(vnode.componentInstance)) { // vnode的组件实例已经创建过了
+          initComponent(vnode, insertedVnodeQueue);// 初始化组件实例，设置vnode.elm
+          insert(parentElm, vnode.elm, refElm); //将vnode.elm插入到父元素下，refElm之前
           if (isTrue(isReactivated)) { // 如果是keepAlive组件
             reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
           }
-          return true
+          return true //如果传入的vnode不是组件占位vnode，不会存在vnode.data.hook.init钩子，也不会创建出组件实例vnode.componentInstance，因此最终createComponent返回undefined，createElm函数继续执行
         }
       }
     }
-
+    // 创建了组件实例之后，进行初始化组件实例
     function initComponent (vnode, insertedVnodeQueue) {
-      if (isDef(vnode.data.pendingInsert)) {
-        insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert);
+      if (isDef(vnode.data.pendingInsert)) {//子组件在创建过程中新增的所有节点加入到insertedVnodeQueue中
+        insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert)
         vnode.data.pendingInsert = null;
       }
-      vnode.elm = vnode.componentInstance.$el;
-      if (isPatchable(vnode)) {
-        invokeCreateHooks(vnode, insertedVnodeQueue);
-        setScope(vnode);
-      } else {
-        registerRef(vnode);
-        insertedVnodeQueue.push(vnode);
+      vnode.elm = vnode.componentInstance.$el //获取组件实例的DOM根元素节点，赋给vnode.elm
+      if (isPatchable(vnode)) {//组件可patch
+        invokeCreateHooks(vnode, insertedVnodeQueue)//调用create钩子
+        setScope(vnode); //设置scope
+      } else { //组件不可patch
+        registerRef(vnode);//注册组件的ref
+        insertedVnodeQueue.push(vnode);//将组件占位 VNode 加入到insertedVnodeQueue
       }
     }
-
+    
     function reactivateComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
       var i;
       var innerNode = vnode;
@@ -4385,14 +4295,13 @@
         nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(String(vnode.text)));
       }
     }
-
+    // 判断vnode是否是可patch的，如果组件的根DOM元素节点，则返回true
     function isPatchable (vnode) {
       while (vnode.componentInstance) { // vnode对应的组件实例存在，继续循环
         vnode = vnode.componentInstance._vnode //当前组件实例的根vnode节点，覆盖vnode
-      } // 最后vnode是传入的vnode对应的组件实例的最根的根vnode
-      return isDef(vnode.tag) // 如果有tag值，说明传入的vnode是Patchable的
+      } // 最后vnode是一开始传入的vnode的首个非组件节点对应的vnode
+      return isDef(vnode.tag) // 如果有tag值，说明传入的vnode是可patch的
     }
-
     // 什么时候调用invokeCreateHooks呢？一个是在createElm调用的时候，一个是在initComponent调用时，调用会遍历cbs.create数组存放的钩子函数，依次调用updateDOMListeners
     function invokeCreateHooks (vnode, insertedVnodeQueue) {
       for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
@@ -4779,7 +4688,7 @@
         return node.nodeType === (vnode.isComment ? 8 : 3)
       }
     }
-    // 首次渲染，執行vm.__patch__，即patch函數，vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false)，更新真實節點時，執行vm.$el = vm.__patch__(prevVnode, vnode)
+    // _update执行，如果是首次渲染，執行vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false)，更新真實節點時，執行vm.$el = vm.__patch__(prevVnode, vnode)，vm.__patch__其实就是patch函数
     return function patch(oldVnode, vnode, hydrating, removeOnly) {
       if (isUndef(vnode)) {//如果新vnode節點沒有定義，但舊的vnode節點有定義，則銷毀舊vnode節點並返回
         if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
@@ -5226,7 +5135,7 @@
   // <div v-on:scroll.passive="onScroll">...</div> 滚动事件的默认行为(即滚动行为)将会立即触发，而不会等待onScroll完成，这其中包含event.preventDefault()的情况。这个passive修饰符尤其能提升移动端的性能
   // 不要把.passive和.prevent一起使用，因为.prevent将会被忽略，.passive会告诉浏览器你不想阻止事件的默认行为。
 
-  // 在组件上使用v-on只会监听自定义事件(用$emit才能触发的事件)。如果要监听根元素的原生事件，可以使用.native修饰符。addHandler函数是给ast对象el，添加事件相关的属性
+  // addHandler函数是给ast对象el添加事件相关的属性。在组件上使用v-on只会监听自定义事件(用$emit才能触发的事件)。如果要监听根元素的原生事件，可以使用.native修饰符。
   function addHandler(el, name, value, modifiers, important, warn, range, dynamic) {
     modifiers = modifiers || emptyObject;
     if (warn && modifiers.prevent && modifiers.passive) {
@@ -5246,56 +5155,54 @@
         name = 'mouseup'
       }
     }
-    if (modifiers.capture) {// 检查是否用了capture修饰符
-      delete modifiers.capture; // 如果是使用了动态参数，name最后是_p(select,"!")
-      name = prependModifierMarker('!', name, dynamic)// 如果没有使用动态参数 !select
+    if (modifiers.capture) {// 如果用了capture修饰符，如果v-on指令使用了动态属性(事件名用[]包裹)，name会变成'_p(select,"!")'，如果没有使用动态属性，name变成"!select"，加了一个!
+      delete modifiers.capture;
+      name = prependModifierMarker('!', name, dynamic)
     }
-    if (modifiers.once) {// 检查是否用了once修饰符
+    if (modifiers.once) {// 如果用了once修饰符，和上面相似，如果没有使用动态属性(动态参数)。name变成~select
       delete modifiers.once;
-      name = prependModifierMarker('~', name, dynamic); //~select
+      name = prependModifierMarker('~', name, dynamic);
     }
-    if (modifiers.passive) {// 检查是否用了passive修饰符
+    if (modifiers.passive) {// 如果用了passive修饰符，&select
       delete modifiers.passive;
-      name = prependModifierMarker('&', name, dynamic); //&select
+      name = prependModifierMarker('&', name, dynamic)
     }
-    // 如果想在一个组件的根元素上直接监听一个原生事件，使用v-on的.native修饰符：<my-input v-on:focus.native="onFocus"></my-input>
+    // 在一个组件的占位元素上直接监听一个原生事件，必须使用.native修饰符：<my-input v-on:focus.native="onFocus"></my-input>
     let events
-    if (modifiers.native) { // 如果使用了native修饰符
+    if (modifiers.native) { // 如果使用了native修饰符，说明给组件占位元素添加原生DOM事件，让events指向el.nativeEvents，如果el.nativeEvents不存在，初始化为{}
       delete modifiers.native
-      events = el.nativeEvents || (el.nativeEvents = {})//变量events指向el.nativeEvents对象，如果el.nativeEvents不存在，赋给它一个{}
-    } else {//如果没有使用.native，变量events指向el.events对象，如果el.events不存在，赋给它一个{}
+      events = el.nativeEvents || (el.nativeEvents = {})
+    } else {//如果没有使用.native，说明是在DOM元素节点上添加原生DOM事件，或给组件占位元素添加自定义事件，events指向el.events，如果el.events不存在，初始化为{}
       events = el.events || (el.events = {})
     }
-    const newHandler = rangeSetItem({ value: value.trim(), dynamic }, range)
-    //新建一个newHandler对象描述新添加进来的事件，对象的value属性是事件指令的值
+    const newHandler = rangeSetItem({ value: value.trim(), dynamic }, range) //newHandler对象主要信息就在value，它是事件绑定指令的值，它描述新添加进来的事件
     if (modifiers !== emptyObject) { //如果使用了修饰符，就往newHandler对象中添加modifiers属性
       newHandler.modifiers = modifiers //modifiers对象类似：{prevent:true,stop:true}
     }
-    // events[name]存储该元素的事件name的所有处理回调，因为对于同一个事件可以添加多次处理回调
-    // 函数形参important决定新添加的回调是放在数组的前面还是后面，决定了是先执行还是后执行
-    var handlers = events[name];
-    if (Array.isArray(handlers)) { // events[name]是一个数组，即name事件对应的回调有多个
+    var handlers = events[name]; //事件name的所有处理回调(同一个事件可以有多个处理回调)
+    if (Array.isArray(handlers)) { //如果events[name]是数组，即事件name对应的回调有多个
+      // 函数形参important决定新添加的回调是放在数组的前面还是后面，决定了是先执行还是后执行
       important ? handlers.unshift(newHandler) : handlers.push(newHandler)
     } else if (handlers) {// events[name]不是数组，但有值，说明name事件的回调只有一个
-      events[name] = important ? [newHandler, handlers] : [handlers, newHandler];
+      events[name] = important ? [newHandler, handlers] : [handlers, newHandler]//创建一个数组，放入新的newHandler和原有的handlers在一块
     } else { // events[name]不存在，说明name事件还没对应的回调
       events[name] = newHandler;//直接把newHandler赋给events[name]
     }
-    el.plain = false;
+    // 上面的处理后，事件对象(数组)被挂载到el.nativeEvents/events上，组件占位元素的原生DOM事件的处理回调被挂载到el.nativeEvents上，其余情况挂载到el.events上
+    el.plain = false; // 因为这个元素承载了事件的回调信息，不是纯的元素了
   }
 
   const getRawBindingAttr = (el, name) => el.rawAttrsMap[`:${name}`] || el.rawAttrsMap[`v-bind:${name}`] || el.rawAttrsMap[name]
 
-  // 用来获取v-bind/:属性或普通属性的值
+  // 获取v-bind/:绑定属性的属性值 或 普通静态属性的值
   function getBindingAttr(el, name, getStatic) {
     var dynamicValue = getAndRemoveAttr(el, `:${name}`) || getAndRemoveAttr(el, `v-bind:${name}`)
-    // 获取名为':'+name的属性值，如果获取不到，则会获取v-bind+name属性的值
-    if (dynamicValue != null) { //如果成功获取到绑定的属性值
-      return parseFilters(dynamicValue) // 解析过滤器的，因为编写绑定的属性时可能用了filter 
-    } else if (getStatic !== false) {// 没有获取到绑定的属性值，且参数getStatic没有传false，则获取非绑定的属性值
-      var staticValue = getAndRemoveAttr(el, name) // 获取静态的属性值
-      if (staticValue != null) return JSON.stringify(staticValue)
-      //如果静态属性值存在，则返回JSON.stringify后的值。JSON.stringify能保证对于非绑定属性，属性值总是字符串而不是变量或表达式。编译器生成的渲染函数是代码字符串，要new Function才能变成函数
+    // 获取名为name的绑定属性的值，即比如:xxx或v-bind:xxx的属性值
+    if (dynamicValue != null) { //如果成功获取到绑定的属性值，调用parseFilters对值进行处理
+      return parseFilters(dynamicValue) // 因为用户编写绑定的属性值可能用了filter 
+    } else if (getStatic !== false) {// 没有获取到绑定的属性值，且getStatic没有传false
+      var staticValue = getAndRemoveAttr(el, name) // 则转而获取静态的属性值
+      if (staticValue != null) return JSON.stringify(staticValue) //如果静态属性值存在，它不被视作表达式或变量，而是一个字符串，所以用JSON.stringify处理，它保证了静态属性的属性值总是字符串。编译器生成的渲染函数是代码字符串，要new Function才能变成函数，JSON.stringify后的值在new Function后也还是字符串
     }
   }
 
@@ -5303,17 +5210,17 @@
   function getAndRemoveAttr(el, name, removeFromMap) {
     var val
     if ((val = el.attrsMap[name]) != null) { //attrsMap对象存放该元素所有属性的name:value键值对，如果属性name存在，属性值赋给val
-      var list = el.attrsList;
-      for (var i = 0; i < list.length; i++) { // 遍历el.attrsList
-        if (list[i].name === name) { //找出该属性name对应的对象，删掉
+      var list = el.attrsList; // 获取el.attrsList，遍历它
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].name === name) { //找出list中属性name对应的对象，删掉
           list.splice(i, 1);
           break
         }
       }
     }
-    if (removeFromMap)//如果第三个参数传了，值为真，attrsMap中的属性也删掉
+    if (removeFromMap)//如果第三个参数传了真值，attrsMap中的属性name也删掉
       delete el.attrsMap[name];
-    return val
+    return val //函数的主要目的就是获取属性的值
   }
 
   function getAndRemoveAttrByRegex(el, name) {
@@ -6971,18 +6878,17 @@
     'title,tr,track'
   );
 
-  // 匹配标签的属性
+  // 匹配标签的属性 class="xxx" class='xxx' class=xxx  disabled
   var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
-  // class="some-class" class='some-class' class=some-class disabled
   
   var dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
   
   var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z" + (unicodeRegExp.source) + "]*";
   // XML中，标签可以自定义，比如<bug></bug>，所以不同的文档中如果定义了相同的标签，就会产生冲突，为此，XML允许用户为标签指定前缀 <k:bug></k:bug> 除了前缀还可以使用命名空间，即标签的xmlns属性，为前缀
   var qnameCapture = "((?:" + ncname + "\\:)?" + ncname + ")";
-  var startTagOpen = new RegExp(("^<" + qnameCapture));
-  var startTagClose = /^\s*(\/?)>/; // 匹配开始标签的结束部分，即 > 或 />
-  var endTag = new RegExp(("^<\\/" + qnameCapture + "[^>]*>"));
+  var startTagOpen = new RegExp(("^<" + qnameCapture))//匹配<xxx 开始标签的开头部分
+  var startTagClose = /^\s*(\/?)>/ // 匹配开始标签的结束部分，> 或 />
+  var endTag = new RegExp(("^<\\/" + qnameCapture + "[^>]*>"))//匹配结束标签 比如</div>
   var doctype = /^<!DOCTYPE [^>]+>/i;
   var comment = /^<!\--/;
   var conditionalComment = /^<!\[/;
@@ -7000,15 +6906,7 @@
     const encodedAttr = /&(?:lt|gt|quot|amp|#39);/g;
     const encodedAttrWithNewLines = /&(?:lt|gt|quot|amp|#39|#10|#9);/g;
     const re = shouldDecodeNewlines ? encodedAttrWithNewLines : encodedAttr;
-    const decodingMap = {
-      '&lt;': '<',
-      '&gt;': '>',
-      '&quot;': '"',
-      '&amp;': '&',
-      '&#10;': '\n',
-      '&#9;': '\t',
-      '&#39;': "'"
-    };
+    const decodingMap = { '&lt;': '<', '&gt;': '>', '&quot;': '"', '&amp;': '&', '&#10;': '\n', '&#9;': '\t', '&#39;': "'" };
     return value.replace(re, match => decodingMap[match])
   }
 
@@ -7270,10 +7168,10 @@
   var dirRE = /^v-|^@|^:/ //匹配以 v- @ : 开头的字符串
   var forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/ //匹配v-for的属性值
   var forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
-  var stripParensRE = /^\(|\)$/g;
-  var dynamicArgRE = /^\[.*\]$/ // 匹配最外层用[ ]包裹着的字符串
-  var argRE = /:(.*)$/;  // 匹配指令的参数
-  var bindRE = /^:|^\.|^v-bind:/; // 匹配以 : v-bind: 开头的字符串
+  var stripParensRE = /^\(|\)$/g; // 匹配v-for的值中的括号
+  var dynamicArgRE = /^\[.*\]$/ // 匹配最外层用[]包裹着的字符串
+  var argRE = /:(.*)$/;  // 匹配指令的参数 :xxx
+  var bindRE = /^:|^\.|^v-bind:/; // 匹配:或v-bind:前缀
   var modifierRE = /\.[^.\]]+(?=[^\]]*$)/g;
   var slotRE = /^v-slot(:|$)|^#/;
   var lineBreakRE = /[\r\n]/;
@@ -7304,7 +7202,7 @@
   var platformMustUseProp;
   var platformGetTagNamespace;
   var maybeComponent;
-  // 编译器：人为编写的高级语言所写的程序翻译成计算机能解读并运行的机器语言的程序。parser只是编译器的一部分，是对源代码处理的第一步。它是将普通的字符串转成一个对象的程序，这个对象是编译器能理解的，后续的句法分析、类型检查推导、代码优化、代码生成都依赖于这个抽象出来的对象，称为Abstract Syntax Tree抽象句法树
+  // 编译器：人为编写的高级语言所写的程序翻译成计算机能解读并运行的机器语言的程序。parser只是编译器的一部分，是对源代码处理的第一步。它是将普通的字符串转成一个对象的程序，这个对象是编译器能理解的，后续的句法分析、类型检查推导、代码优化、代码生成都依赖于这个抽象出来的对象，称为AST抽象句法树
   // Vue的编译器大致分为3个阶段：词法分析->句法分析->代码生成。词法分析：把字符串模板解析成一个个的令牌(token)。句法分析：根据令牌生成一棵AST。最后根据该AST生成最终的渲染函数，这就是代码生成。先看词法分析，看看Vue是如何拆解字符串模板的。
   function parse(template, options) { // 主要通过调用parseHTML来辅助ast的构建
     warn$2 = options.warn || baseWarn; // 打印警告信息
@@ -7335,19 +7233,18 @@
     function closeElement (element) { // 传入的是1元标签所对应的el对象，或2元标签对应el对象
       trimEndingWhitespace(element) // 你要闭合一个标签，那么它的末尾子节点有可能是空文本节点，要把它从元素描述对象的children数组中弹出
       if (!inVPre && !element.processed) {//你要闭合的标签不处于v-pre之中，且没被解析过
-        element = processElement(element, options);
+        element = processElement(element, options) //处理元素描述对象上的一些属性
       }
-      if (!stack.length && element !== root) {
-        // stack不为空，且当前元素不是根元素，我们知道，每遇到一个2元标签的开始标签就会把它推入stack，每遇到一个结束标签就会让栈顶元素出栈，即它对应的开始标签出栈，所以stack不为空说明还有开始标签没闭合，还要继续解析。并且当前不是根元素，因为根元素只有一个，当前是根元素的话，stack中不可能有元素
-        // 实际上，如果满足下面条件，是可以定义几个根元素，但root始终引用第一个根元素的描述对象，但如果不满足条件，报警说不能定义多个根元素
-        if (root.if && (element.elseif || element.else)) {//第一个定义的根元素使用了v-if，当前元素使用了v-else-if或v-else
-          checkRootConstraints(element); //那就检查当前元素是否符合作为根元素的要求
+      if (!stack.length && element !== root) { //我们知道每遇到一个2元标签的开始标签就会将它的描述对象推入stack中，每遇到一个结束标签时都会将它的描述对象从stack中弹出。如果只有一个根元素，正常解析完一段html代码后，stack应该为空，或者说，当stack被清空则说明整个模板字符串已经解析完。现在当前解析的元素是root元素，则stack一定为空，如果当前解析的不是根元素，且stack为空，则说明模板中有不止一个根元素，只是现在解析的没有被当做root。
+        // 事实上，满足一定条件是可以定义几个根元素的，但root始终指向第一个根元素的描述对象，如果不满足条件，则会报警说不能定义多个根元素
+        if (root.if && (element.elseif || element.else)) {//root第一个定义的根元素用了v-if，当前元素用了v-else-if/v-else，这样所有的根元素都是由v-if/v-else-if/v-else等控制，间接保证了被渲染的根元素只有一个
+          checkRootConstraints(element); //检查当前元素是否符合作为根元素的要求
           addIfCondition(root, {
             exp: element.elseif,
             block: element
           });//具有v-else-if/v-else属性的元素的描述对象会被添加到具有v-if属性的元素描述对象的ifConnditions数组中。后面你会发现有v-if的元素也会将自身的元素描述对象添加到自己的ifConditions数组中
         } else { //如果条件不满足，会给出友好提示
-          warnOnce("组件模版必须包含一个根节点。但你可以定义多个根元素，只要保证最终只渲染其中一个即可，实现方式就是在多个根元素之间使用v-if或v-else-if或v-else", { start: element.start })
+          warnOnce("组件模版必须包含一个根节点。你可以定义多个根元素，但必须保证最终只渲染其中一个", { start: element.start })
         }
       }
       if (currentParent && !element.forbidden) {
@@ -7388,14 +7285,13 @@
         }
       }
     }
-    // 检查当前元素是否符合作为根元素的要求：不能是slot和template标签，不能使用v-for
+
+    // 检查当前元素是否符合根元素的要求。我们知道编写模板时有两个约束：1模板有且仅有一个被渲染的根元素，2是不能使用slot标签和template标签作为模板的根元素，不能是slot和template标签作为根元素，因为slot作为插槽，它的内容是外界决定的，插槽的内容可能渲染多个节点，template元素的内容虽然不是外界决定的，但它本身作为抽象组件不会渲染任何内容到页面，它有可能包含多个子节点，这些限制都是基于必须有且只有一个根元素
     function checkRootConstraints(el) {
-      if (el.tag === 'slot' || el.tag === 'template') {
-        warnOnce(`不能使用slot节点作为模版的根节点，因为作为插槽，内容是外界决定的，就有可能渲染多个节点，而template元素本身作为抽象组件是不会渲染任何内容到页面，它又可能包含多个子节点，所以也不允许使用template标签作为根节点`)
-      }
-      if (el.attrsMap.hasOwnProperty('v-for')) {
+      if (el.tag === 'slot' || el.tag === 'template') 
+        warnOnce(`不能使用slot节点或template标签作为模版的根节点`)
+      if (el.attrsMap.hasOwnProperty('v-for')) 
         warnOnce('根节点不能使用v-for指令，因为v-for指令会渲染多个节点')
-      }
     }
     // parseHTML的调用接收几个重要的钩子函数，主要是start end这两个钩子，对模版字符串做词法解析，parse在此基础上做句法分析，生成一颗AST
     parseHTML(template, {
@@ -7442,8 +7338,7 @@
         for (var i = 0; i < preTransforms.length; i++) {
           element = preTransforms[i](element, options) || element;
         }
-        // 如果当前解析的元素不处于v-pre指令之中，则要看看它自己有没有用v-pre，这决定了它和它的子元素是否处于v-pre环境
-        if (!inVPre) { // 当前解析的元素不处于v-pre环境中
+        if (!inVPre) { // 当前解析的元素不处于v-pre环境中，调用processPre检查它自己是否使用v-pre，这决定了它和它的子元素是否处于v-pre环境
           processPre(element); // 如果该元素用了v-pre，给描述它的el对象添加pre属性
           if (element.pre) {// 如果当前元素用了v-pre，则将inVPre变真，意味着后续的所有解析工作都处于v-pre指令下，编译器就会跳过拥有v-pre的元素和它子元素，不对它们进行编译
             inVPre = true
@@ -7601,23 +7496,24 @@
     return element
   }
 
-  function processKey(el) {
-    var exp = getBindingAttr(el, 'key'); // 获取到属性名为key的属性值
+  //key的值主要用在patch函数执行时，新旧vnode对比时辨识vnode，如果不用使用key，Vue会使用最大限度减少动态元素并且尽可能尝试复用相同类型元素，使用了key，会基于的key的变化重新排列元素顺序，并且会移除key不存在的元素。有相同父元素的子元素必须有独特的key值，重复的key会造成渲染错误
+  function processKey(el) { // 函数的作用是如果元素el能获取到属性key的值，则赋给el.key
+    var exp = getBindingAttr(el, 'key') // 获取到属性key的属性值
     if (exp) { // key属性的值存在
-      if (el.tag === 'template') { // 如果<template>标签使用了key属性，会报警提示
-        warn$2("不要在<template>上用key属性，把key用在真实的标签元素", getRawBindingAttr(el, 'key'));
+      if (el.tag === 'template') { // <template>标签不能使用key属性
+        warn$2("不要在<template>上用key属性，把key用在真实的标签元素", getRawBindingAttr(el, 'key'))
       }
       if (el.for) { // 如果el使用了v-for指令
         var iterator = el.iterator2 || el.iterator1;
         var parent = el.parent;
         if (iterator && iterator === exp && parent && parent.tag === 'transition-group') {
-          warn$2("Do not use v-for index as key on <transition-group> children, this is the same as not using keys.", getRawBindingAttr(el, 'key'), true /* tip */);
+          warn$2("Do not use v-for index as key on <transition-group> children, this is the same as not using keys.", getRawBindingAttr(el, 'key'), true /*tip*/)
         }
       }
-      el.key = exp; // key的属性值存在，为元素描述对象添加 key 属性，值是 key 属性的值
-      // <div key="id"></div> el.key = JSON.stringify('id')
-      // <div :key="id"></div> el.key = 'id'
-      // <div :key="id | featId"></div> el.key = '_f("featId")(id)'
+      el.key = exp; // key的属性值存在，添加到元素描述对象的key属性
+      // <div key="id"></div> 处理后 el.key = JSON.stringify('id')
+      // <div :key="id"></div> 处理后 el.key = 'id'
+      // <div :key="id | featId"></div> 处理后 el.key = '_f("featId")(id)'
     }
   }
 
@@ -7707,9 +7603,9 @@
     }
   }
 
-  function addIfCondition(el, condition) {
-    if (!el.ifConditions) el.ifConditions = []//如果el的ifConditions不存在，初始化一下
-    el.ifConditions.push(condition) // ifConditions数组添加condition对象
+  function addIfCondition(el, condition) { //首先检查元素描述对象是否存在ifConditions属性
+    if (!el.ifConditions) el.ifConditions = []//如果不存在则初始化为一个空数组
+    el.ifConditions.push(condition) // 往这个属性(数组)添加condition对象
   }
 
   function processOnce (el) {
@@ -7827,11 +7723,11 @@
   function processAttrs (el) {
     var list = el.attrsList;
     var name, rawName, value, modifiers, syncGen, isDynamic;
-    for (var i = 0; i < list.length; i++) {//遍历每个属性
-      name = rawName = list[i].name; // name是指令名字符串
-      value = list[i].value; // value是指令的值
-      if (dirRE.test(name)) { //如果属性名name以v- @ :开头，说明是指令
-        el.hasBindings = true; // 标记当前元素是动态元素，因为指令的值必然是表达式而不是常量
+    for (var i = 0; i < list.length; i++) {//遍历剩下的每个属性
+      name = rawName = list[i].name; // name是属性名字符串
+      value = list[i].value; // value是属性的值
+      if (dirRE.test(name)) { //如果name以v-/@/:开头，说明这是指令
+        el.hasBindings = true; // 因为指令的值必然是表达式而不是常量，标记当前元素是动态元素，
         //一个完整的指令包含指令名、指令的参数、指令的修饰符、指令的值
         modifiers = parseModifiers(name.replace(dirRE, ''))//对name解析出修饰符对象，类似：{prevent:true,stop:true}
         if (modifiers) { //如果用了修饰符，将修饰符从指令字符串name中移除
@@ -7905,15 +7801,13 @@
             addAttr(el, name, value, list[i], isDynamic);
           }
         } else if (onRE.test(name)) { // 当前指令是v-on/@指令
-          name = name.replace(onRE, ''); // 去掉指令前缀，剩下真正的事件名。比如：select
+          name = name.replace(onRE, ''); // 去掉指令前缀，剩下事件名比如：select
           isDynamic = dynamicArgRE.test(name); // 是否被[]包裹着
-          // vue2.6新增了动态参数，可以用[]括起来的JS表达式作为一个指令的参数：v-bind:[key]="value"
-          // 这里的key会被作为JS表达式进行动态求值，求得的值会作为最终的参数来使用。同样地，你可以使用动态参数为一个动态的事件名绑定处理函数：v-on:[event]="handler"，当event的值为"focus"时，v-on:[eventName]等价于v-on:focus
-          if (isDynamic) { // 如果是动态参数，将包裹的[]去掉
-            name = name.slice(1, -1);
-          }
-          // 调用addHandler为el添加事件相关的属性，而且addHandler还有一个重要功能，是对事件修饰符的特殊处理 
-          addHandler(el, name, value, modifiers, false, warn$2, list[i], isDynamic);
+          // vue2.6新增了动态属性，就是key值可以会发生变动的属性，写法就像v-bind:[key]="value"，用[]括起来的JS表达式作为一个指令的key值，非动态属性只能修改value值
+          // 比如你可以使用动态参数为一个动态的事件名绑定处理函数：v-on:[event]="handler"，当event的值为"focus"时，v-on:focus
+          if (isDynamic) name = name.slice(1, -1) // 如果是动态参数，将包裹的[]去掉
+          // 调用addHandler为元素的描述对象el添加事件相关的属性
+          addHandler(el, name, value, modifiers, false, warn$2, list[i], isDynamic)
         } else { // 普通的指令(包括v-model)
           name = name.replace(dirRE, '') // 去掉指令的前缀，v- : @ 
           var argMatch = name.match(argRE); // 匹配出指令的参数
@@ -8118,24 +8012,22 @@
 
   var isStaticKey;
   var isPlatformReservedTag;
-
   var genStaticKeysCached = cached(genStaticKeys$1);
 
+  // 模板字符串经过parse解析后，会生成一个ast树，optimize做的是优化ast树(视图里有的节点不是响应式的，是静态的和数据变化无关的，每次渲染生成的DOM节点都完全相同，optimize就是将静态节点标记出来，首次渲染之后，之后每一次patch就跳过对它们的比对)，优化了ast树后，根据ast树生成对应的渲染函数的代码字符串。
   function optimize (root, options) {
     if (!root) return 
     isStaticKey = genStaticKeysCached(options.staticKeys || '');
     isPlatformReservedTag = options.isReservedTag || no;
-    // 第一步: 标记所有的静态节点
-    markStatic$1(root);
-    // 第二步: 标记静态根节点
-    markStaticRoots(root, false);
+    markStatic$1(root) // 标记所有的静态节点
+    markStaticRoots(root, false) // 标记静态根节点
   }
 
   function genStaticKeys$1 (keys) {
     return makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs,start,end,rawAttrsMap' + keys ? ',' + keys : '')
   }
-
-  function markStatic$1 (node) {
+  // 标记静态节点，传入的是ast树的根节点
+  function markStatic$1 (node) { 
     node.static = isStatic(node);
     if (node.type === 1) {
       if (
@@ -8245,15 +8137,15 @@
     left: genGuard("'button' in $event && $event.button !== 0"),
     middle: genGuard("'button' in $event && $event.button !== 1"),
     right: genGuard("'button' in $event && $event.button !== 2")
-  };
+  }
 
-  // genHandlers函数遍历el.events或nativeEvents事件对象(后者是通过.native监听的原生DOM事件)，对同一个事件名的事件调用genHandler函数，生成事件相关的供拼接的代码字符串
+  // genHandlers函数遍历el.events或nativeEvents事件对象，对同一个事件名的事件调用genHandler函数，生成供拼接的数据对象data.nativeOn/data.on的代码字符串
   function genHandlers (events, isNative) { // isNative代表是否监听原生DOM事件
     var prefix = isNative ? 'nativeOn:' : 'on:'; // 属性值不一样，nativeOn和on
     let staticHandlers = ``
     let dynamicHandlers = `` // 针对动态事件参数
     for (const name in events) { // 遍历el的事件对象的每一个事件
-      const handlerCode = genHandler(events[name]) // 调用genHandler生成该事件对应的代码
+      const handlerCode = genHandler(events[name]) //调用genHandler，根据该事件的处理回调生成对应的函数代码字符串
       if (events[name] && events[name].dynamic) {
         dynamicHandlers += `${name},${handlerCode},`
       } else { //如果不是动态参数，则类似这样：'"select":function($event){...}'
@@ -8264,14 +8156,15 @@
     if (dynamicHandlers) {
       return prefix + `_d(${staticHandlers},[${dynamicHandlers.slice(0, -1)}])`
     } else { // 添加prefix前缀 比如 'on:"select":function($event){...}'
-      return prefix + staticHandlers
+      return prefix + staticHandlers // 如果是组件占位节点上的原生事件，生成的函数代码字符串赋给data.nativeOn，如果是组件占位节点上的自定义事件，或普通DOM节点上的原生事件，生成的函数代码字符串赋给data.on上
     }
   }
-  // 传入的参数是具体某个事件名对应的handler，可能是数组也可能是对象
+
+  // 传入的参数是某个事件名对应的事件处理器(handler)，可能是数组也可能是对象
   function genHandler (handler) { 
-    if (!handler) return 'function(){}' // 如果没有对应的回调，就返回一个空函数字符串
-    // handler为数组，说明该事件绑定了多个回调，递归调用getHandler方法。
-    if (Array.isArray(handler)) { // 把多个函数字符串，放入到数组里，形如`[function($event){...},function($event){...},function($event){...}]`
+    if (!handler) return 'function(){}' // 如果没有对应的事件处理器，就返回一个空函数字符串
+
+    if (Array.isArray(handler)) { //如果handler为数组，存放着该事件的多个处理回调，数组调用map对每个回调执行getHandler方法，每个回调转成对应的函数字符串，然后数组调用jion拼接起来，再放到一个数组里，形如`[function($event){...},function($event){...},function($event){...}]`
       return `[${handler.map(handler => genHandler(handler)).join(',')}]`
     }
     // handler是对象，判断它的value属性，即指令的值。事件绑定有3种写法：@click="doThis" @click="functions(){}" @click="doThis($event)"，分别对应下面三种
@@ -8398,13 +8291,13 @@
       } else { // 其余的普通元素
         var data;
         if (!el.plain || (el.pre && state.maybeComponent(el))) {
-          data = genData$2(el, state);
+          data = genData$2(el, state); //生成节点的数据对象
         }
         var children = el.inlineTemplate ? null : genChildren(el, state, true);
         code = `_c('${el.tag}'${
-          data ? `,${data}` : '' // data
+          data ? `,${data}` : ''
           }${
-          children ? `,${children}` : '' // children
+          children ? `,${children}` : ''
           })`
       }
       for (var i = 0; i < state.transforms.length; i++) {
@@ -8554,11 +8447,11 @@
     if (el.props) {
       data += "domProps:" + (genProps(el.props)) + ",";
     }
-    if (el.events) { // 如果该元素绑定有自定义事件，调用genHandlers生成一段代码
-      data += `${genHandlers(el.events, false)},` // false代表不是原生事件
+    if (el.events) { // el.events存在，说明要么是组件占位节点有自定义事件的处理回调，要么是原生DOM节点有原生DOM事件的处理回调，调用genHandlers生成对应的代码字符串
+      data += `${genHandlers(el.events, false)},`
     }
-    if (el.nativeEvents) { //如果该元素通过.native绑定了原生DOM事件
-      data += `${genHandlers(el.nativeEvents, true)},`// true代表是原生事件
+    if (el.nativeEvents) { //el.nativeEvents存在，说明该组件占位节点上有原生DOM事件的处理回调，调用genHandlers生成对应的代码字符串
+      data += `${genHandlers(el.nativeEvents, true)},`
     }
     if (el.slotTarget && !el.slotScope) {
       data += "slot:" + (el.slotTarget) + ",";
@@ -8694,7 +8587,6 @@
     var children = el.children;
     if (children.length) {
       var el$1 = children[0];
-      // optimize single v-for
       if (children.length === 1 &&
         el$1.for &&
         el$1.tag !== 'template' &&
@@ -9036,13 +8928,13 @@
   }
   // Vue利用函数柯里化这种技巧，生成编译模板的方法compileToFunctions，看似设计繁琐，实际设计十分巧妙。这样设计的原因是Vue能在不同平台运行，比如在服务器端做SSR，也可以在weex下使用。不同平台都会有编译过程，所依赖的基本编译选项baseOptions会有所不同。Vue将基础的编译过程抽离出来，并且可以在多处添加编译器选项，然后将添加的编译器选项和基本编译选项合并起来，最终灵活实现在不同平台下的编译。
 
-  // baseCompile是模板编译的核心，由代码可以看出，编译的第一步是调用parse函数将模版字符串解析成ast；第二步是优化ast树；第三步根据优化后的ast树生成包含渲染函数字符串的对象
+  // baseCompile是compile函数的核心，模板编译就是靠baseCompile，baseCompile函数返回对模板的编译结果对象，包含了渲染函数代码字符串
   function baseCompile(template, options) { // 接收模版字符串和finalOptions
     const ast = parse(template.trim(), options) // 模版字符串解析成抽象语法树ast。这里面包括了属性/指令的解析，解析结果放入相关属性中
     if (options.optimize !== false) { // 优化ast
       optimize(ast, options);
     }
-    let code = generate(ast, options);// 根据解析完的ast树生成渲染函数字符串，包括el.directives中的指令也会生成对应的代码字符串。
+    let code = generate(ast, options) //根据解析完的ast树生成渲染函数字符串，我们知道ast对象里承载了很多属性信息指令信息，generate转化为对应的代码字符串
     return {
       ast, // 抽象语法树ast
       render: code.render, //渲染函数代码字符串

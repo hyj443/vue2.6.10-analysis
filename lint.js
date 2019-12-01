@@ -95,18 +95,17 @@
 // 在 processRawAttrs 函数内部首先定义了 l 常量，，接着使用一个 if 语句判断 l 是否为真，如果，此时会执行 if 语句块内的代码，在 if 语句块内首先定义了 attrs 常量，它与 el.attrs 属性有着相同的引用，初始值是长度为 l 的数组。接着使用 for 循环，并：
 
 
-
-var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
-
-let text = 'aaaa{{飞飞飞}}efefeefe'
-
-let match = defaultTagRE.exec(text)
-
-console.log(match[1]);
+  
 
 
-let tokenValue = text.slice(0, match.index)
+let f = new Function(`let a=11;
+  let b;
+  b='a';
+  console.log(b)
+`)
 
+console.log(
 
+f()
 
-// console.log(tokenValue);
+);

@@ -52,3 +52,37 @@ runtime+compiler 对比 runtime-only
 执行 update（如果存在 data 属性）
 比较 oldVnode 和 vnode 两个节点
 执行 postpatch（如果存在 data 属性）
+
+
+将子组件首次渲染创建 DOM Tree 过程中收集的insertedVnodeQueue（保存在子组件占位 VNode 的vnode.data.pendingInsert里）添加到父组件的insertedVnodeQueue
+获取到组件实例的 DOM 根元素节点，赋给vnode.elm
+判断组件是否是可patch的
+
+
+```js
+let a = 'global scope'
+function fn() {
+  let a = 'local scope'
+  return () => a
+}
+let foo = fn()
+console.log(foo()); // local scope
+```
+
+进入全局代码，创建全局执行上下文，全局执行上下文压入执行上下文栈
+全局执行上下文初始化
+执行fn，创建fn函数执行上下文，fn执行上下文被压入执行上下文栈
+fn执行上下文初始化，创建变量对象，作用域链，this等
+fn执行完毕，fn执行上下文从执行上下文栈中弹出
+执行foo函数，创建foo函数的执行上下文，foo执行上下文被压入执行上下文栈
+foo执行上下文初始化，创建变量对象 作用域链 this等
+foo函数执行完毕，foo函数上下文从执行上下文栈中弹出
+
+当执行foo函数时，fn函数的上下文已经被销毁了，即从执行上下文栈中被弹出了，为什么还能读取到fn函数作用域中的a的值
+
+foo执行上下文维护了一个作用域链：
+fooContext={
+  Scope:[AO, fnContext.AO, globalContext.VO]
+}
+就是因为这个作用域链，foo函数依然可以读取到fnContext.AO的值
+说明foo函数引用了fnContext.AO中的值时，即使fnContext被销毁了，但是js仍然会让fnContext.AO活在内存中，foo函数依然可以通过foo函数的作用域链找到它

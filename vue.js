@@ -6753,7 +6753,7 @@
     return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
   });
 
-  // 解析插值符号里的文本，你要明白{{}}内的是表达式，而不是字符串，它里面字符串应当被视为表达式exp，区别于{{}}之外的静态文本
+  // 解析插值符号里的文本，{{}}内应当被视为表达式而不是字符串，区别于{{}}之外的静态文本
   function parseText(text, delimiters) { // 第二个参数是改变Vue原本的{{}}插值符号，比如传['${', '}']，那么插值符号就不是{{}}，而是${}
     var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
     if (!tagRE.test(text)) return // 如果没有匹配到插值符号和它里面的内容，就直接返回
@@ -7181,13 +7181,14 @@
   // 比如字符实体&#x26; 代表的字符为&。所以字符串&#x26;经过解码后将变为字符&。decodeHTMLCached函数用于对纯文本的解码，如果不进行解码，则用户将无法使用字符实体编写字符
   // cached函数接收一个函数作为参数，并返回一个新的函数，返回的新函数的功能和作为参数传入的函数的功能相同，唯一不同的是新函数具有缓存值的功能。如果一个函数接收相同参数的情况下返回值总是相同的，cached函数使用的函数柯里化技术就能带来性能的提升，不用每次都执行函数的功能，返回缓存值就好。
   var emptySlotScopeToken = "_empty_";
-  // 用来创建一个元素的描述对象，封装出一个函数就不用每次手动编写对象字面量了，提高代码整洁性
+
+  // createASTElement用来创建一个元素节点的描述对象(ast节点对象)，接收标签名tag、标签的属性数组attrs、父标签描述对象的引用parent。
   function createASTElement(tag, attrs, parent) {
-    return { //接收 标签名 标签的属性数组 父标签描述对象的引用
-      type: 1,
+    return {
+      type: 1, //ast对象的type:1代表这个是描述元素节点的
       tag,
-      attrsList: attrs,//[{name:'v-for',value:'item in list'}]
-      attrsMap: makeAttrsMap(attrs), //{'v-for':'item in list'}
+      attrsList: attrs,// [{name:'v-for',value:'item in list'}]
+      attrsMap: makeAttrsMap(attrs), // {'v-for':'item in list'}
       rawAttrsMap: {},
       parent,
       children: []
@@ -7286,13 +7287,12 @@
       }
     }
 
-    // 检查当前元素是否符合根元素的要求。我们知道编写模板时有两个约束：1模板有且仅有一个被渲染的根元素，2是不能使用slot标签和template标签作为模板的根元素，不能是slot和template标签作为根元素，因为slot作为插槽，它的内容是外界决定的，插槽的内容可能渲染多个节点，template元素的内容虽然不是外界决定的，但它本身作为抽象组件不会渲染任何内容到页面，它有可能包含多个子节点，这些限制都是基于必须有且只有一个根元素
+    // 检查当前元素是否符合根元素的要求。我们知道编写模板时有几个约束：1模板有且仅有一个被渲染的根元素，2是不能使用slot标签和template标签作为模板的根元素，不能是slot和template标签作为根元素，因为slot作为插槽，它的内容是外界决定的，插槽的内容可能渲染多个节点，template元素的内容虽然不是外界决定的，但它本身作为抽象组件不会渲染任何内容到页面，它有可能包含多个子节点。3根元素是不允许使用v-for的，因为会渲染出多个节点。这些限制都是基于必须有且只有一个根元素
     function checkRootConstraints(el) {
-      if (el.tag === 'slot' || el.tag === 'template') 
-        warnOnce(`不能使用slot节点或template标签作为模版的根节点`)
-      if (el.attrsMap.hasOwnProperty('v-for')) 
-        warnOnce('根节点不能使用v-for指令，因为v-for指令会渲染多个节点')
+      if (el.tag === 'slot' || el.tag === 'template') warnOnce(`Cannot use <${el.tag}> as component root element because it may contain multiple nodes.`)
+      if (el.attrsMap.hasOwnProperty('v-for')) warnOnce('Cannot use v-for on stateful component root element because it renders multiple elements.')
     }
+    
     // parseHTML的调用接收几个重要的钩子函数，主要是start end这两个钩子，对模版字符串做词法解析，parse在此基础上做句法分析，生成一颗AST
     parseHTML(template, {
       warn: warn$2,
@@ -7303,7 +7303,7 @@
       shouldDecodeNewlinesForHref: options.shouldDecodeNewlinesForHref,
       shouldKeepComment: options.comments,
       outputSourceRange: options.outputSourceRange,
-      // 解析html字符串时每次遇到开始标签就调用它，完成ast构建并建立父子级关系
+      // 解析html字符串时遇到开始标签就调用start钩子，完成ast构建并建立父子关系
       start (tag, attrs, unary, start$1, end) {
         var ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag);
         if (isIE && ns === 'svg') {// handle IE svg bug
@@ -7370,7 +7370,7 @@
           closeElement(element); //不往stack推是因为1元标签不能成为父节点
         }
       },
-      end(tag, start, end$1) { // 解析html字符串时每当遇到一个2元标签的结束标签时，调用钩子函数end，将currentParent回退为之前的值，这样就修正了当前元素的父级元素，不会把兄弟元素当父级元素了
+      end(tag, start, end$1) { // 解析html字符串时每遇到一个2元标签的结束标签时，调用钩子函数end，将currentParent回退为之前的值，这样就修正了当前元素的父级元素，不会把兄弟元素当父级元素了
         var element = stack[stack.length - 1] // 获取栈顶元素
         stack.length -= 1; // 栈弹出一个元素描述对象
         currentParent = stack[stack.length - 1]; // currentParent指向栈顶
@@ -7379,9 +7379,10 @@
         }
         closeElement(element) // 调用closeElement结束
       },
+
       // 解析html字符串时每次遇到纯文本时就会调用chars函数
       chars(text, start, end) {
-        if (!currentParent) { //不存在currentParent，即当前解析的是文本是没有父元素包裹的，直接像根元素那样存在，是要报错的，并且return
+        if (!currentParent) { //当前解析的是文本没有父元素包裹，直接像根元素那样存在，是不允许的，报错并return
           if (text === template) { // 如果处理的html字符串正好就是这段纯文本，即<template>{{name}}fefe</template>这样，会报错
             warnOnce('组件模板需要一个根元素，而不仅仅是文本', { start })
           } else if ((text = text.trim())) { // 将处理的纯文本去掉空格后仍存在文本，会提示：
@@ -7412,14 +7413,14 @@
           var res;
           var child;
           if (!inVPre && text !== ' ' && (res = parseText(text, delimiters))) {
-            //如果当前解析不处在v-pre之中，且text不为一个空格的字符串，调用parseText对text文本做解析，然后把解析的结果赋给res，解析成功，创建一个对象child
+            //如果当前解析不处在v-pre之中，且text不为一个空格的字符串，调用parseText对text文本做解析(解析插值符号里的文本)，解析结果赋给res，res有值，创建一个对象child
             child = {
-              type: 2, // type为2 代表它是这是文本对象
+              type: 2, // type:2代表这是带变量的动态文本ast节点
               expression: res.expression,
               tokens: res.tokens,
-              text // text属性存放文本text
+              text // text属性存放未经parseText的文本
             };
-          } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
+          } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') { //
             child = { type: 3, text };
           }
           if (child) {
@@ -7431,10 +7432,10 @@
           }
         }
       },
-      // 解析html字符串每次遇到注释节点会调用该函数
-      comment (text, start, end) {
+      // 解析html字符串每次遇到注释节点会调用该函数。如果它有父元素，创建一个ast对象child，type属性值为3，代表它是不带变量的纯文本节点，text属性为它的文本内容，isComment为真代表它是注释节点。然后把child对象推入父元素currentParent的children数组中，建立父子关系
+      comment(text, start, end) {
         if (currentParent) {
-          var child = { type: 3, text, isComment: true };
+          var child = { type: 3, text, isComment: true }
           if (options.outputSourceRange) {
             child.start = start;
             child.end = end;
@@ -7562,7 +7563,10 @@
     if (exp) { // 如果v-if属性值存在，给el添加if属性值为v-if的属性值
       el.if = exp
       // 如果元素使用了v-if，会把包含它自身的元素描述对象el添加到el的ifConditions属性数组
-      addIfCondition(el, { exp, block: el })
+      addIfCondition(el, {
+        exp,
+        block: el
+      })
     } else { //v-if属性值不存在，就会看看v-else
       if (getAndRemoveAttr(el, 'v-else') != null) { // v-else的属性值存在
         el.else = true; //给el添加else属性，值为true
@@ -7602,10 +7606,10 @@
       }
     }
   }
-
-  function addIfCondition(el, condition) { //首先检查元素描述对象是否存在ifConditions属性
-    if (!el.ifConditions) el.ifConditions = []//如果不存在则初始化为一个空数组
-    el.ifConditions.push(condition) // 往这个属性(数组)添加condition对象
+  // 给元素描述对象的ifConditions属性(数组)添加condition对象
+  function addIfCondition(el, condition) { 
+    if (!el.ifConditions) el.ifConditions = []
+    el.ifConditions.push(condition) 
   }
 
   function processOnce (el) {
@@ -8019,8 +8023,8 @@
     if (!root) return 
     isStaticKey = genStaticKeysCached(options.staticKeys || '');
     isPlatformReservedTag = options.isReservedTag || no;
-    markStatic$1(root) // 标记所有的静态节点
-    markStaticRoots(root, false) // 标记静态根节点
+    markStatic$1(root) // 标记所有的静态节点，包括所有子节点
+    markStaticRoots(root, false) // 标记静态根节点，false代表这个根节点没有用v-for
   }
 
   function genStaticKeys$1 (keys) {
@@ -8028,13 +8032,14 @@
   }
   // 标记静态节点，传入的是ast树的根节点
   function markStatic$1 (node) { 
-    node.static = isStatic(node);
-    if (node.type === 1) {
-      if (
+    node.static = isStatic(node); //每个ast对象都会添加static属性，先经过isStatic的一轮判断，node.type为2/3和别的一些情况可以先判断了，然后继续下面的判断
+    if (node.type === 1) { //如果是该ast节点是描述元素节点的
+      if ( //如果标签名不是html内置的标签，且又不是slot标签，且没有inline-template这个属性，直接返回不用标记
         !isPlatformReservedTag(node.tag) &&
         node.tag !== 'slot' &&
         node.attrsMap['inline-template'] == null
       ) return
+      // 遍历当前ast节点的子节点数组，对每一个子节点递归调用markStatic$1，如果某个子节点不是静态节点，则作为父节点的当前ast节点也不是静态节点
       for (var i = 0, l = node.children.length; i < l; i++) {
         var child = node.children[i];
         markStatic$1(child);
@@ -8042,8 +8047,9 @@
           node.static = false;
         }
       }
+      // 如果描述的元素节点使用了v-if，遍历ifConditions数组，block可能是它自己，也可能是跟随在它后面的用了v-else/v-else-if的节点，递归调用markStatic$1判断它是否是静态节点，如果存在一个不是静态节点，则这个使用了v-if的节点不是静态的
       if (node.ifConditions) {
-        for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
+        for (var i$1 = 1; i$1 < node.ifConditions.length; i$1++) {
           var block = node.ifConditions[i$1].block;
           markStatic$1(block);
           if (!block.static) {
@@ -8053,47 +8059,51 @@
       }
     }
   }
-
+  // 标记静态根节点，如果当前节点是静态节点，且有子节点，并且子节点不是单个静态文本节点，那当前节点就被标记为根静态节点。所以如果一个静态节点只包含一个静态文本节点，就不会被标记为静态根节点，这么做是为了性能考虑，如果一个只包含静态文本的节点标记为根节点，带来的成本超过收益
   function markStaticRoots (node, isInFor) {
-    if (node.type === 1) {
-      if (node.static || node.once) {
-        node.staticInFor = isInFor;
+    if (node.type !== 1) return //如果不是描述元素节点的ast对象，直接返回
+    if (node.static || node.once) {//如果是静态节点或是一次性节点，给节点添加staticInFor属性，赋给它isInFor，代表这个是不是处于v-for之中
+      node.staticInFor = isInFor;
+    }
+    if (//如果当前节点是静态节点，
+      node.static && node.children.length &&
+      !(node.children.length === 1 &&
+        node.children[0].type === 3)
+    ) {
+      node.staticRoot = true;
+      return
+    } else {
+      node.staticRoot = false;
+    }
+    if (node.children) {
+      for (var i = 0, l = node.children.length; i < l; i++) {
+        markStaticRoots(node.children[i], isInFor || !!node.for);
       }
-      if (node.static && node.children.length && !(
-        node.children.length === 1 &&
-        node.children[0].type === 3
-      )) {
-        node.staticRoot = true;
-        return
-      } else {
-        node.staticRoot = false;
-      }
-      if (node.children) {
-        for (var i = 0, l = node.children.length; i < l; i++) {
-          markStaticRoots(node.children[i], isInFor || !!node.for);
-        }
-      }
-      if (node.ifConditions) {
-        for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
-          markStaticRoots(node.ifConditions[i$1].block, isInFor);
-        }
+    }
+    if (node.ifConditions) {
+      for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
+        markStaticRoots(node.ifConditions[i$1].block, isInFor);
       }
     }
   }
-
+  // 判断一个ast对象是否是静态ast节点，满足下面这些条件才行
   function isStatic (node) {
-    if (node.type === 2) return false
-    if (node.type === 3) return true
-    return !!(node.pre || (
-      !node.hasBindings && // no dynamic bindings
-      !node.if && !node.for && // not v-if or v-for or v-else
-      !isBuiltInTag(node.tag) && // not a built-in
-      isPlatformReservedTag(node.tag) && // not a component
-      !isDirectChildOfTemplateFor(node) &&
-      Object.keys(node).every(isStaticKey)
+    if (node.type === 2) return false //带变量的动态文本节点，不行
+    if (node.type === 3) return true //不带变量的静态文本节点，可以
+    return !!(node.pre || ( // 不用编译的节点，可以
+      !node.hasBindings && // 不能使用了指令，因为它有动态绑定
+      !node.if && !node.for && // 没有用v-if或v-for或v-else
+      !isBuiltInTag(node.tag) && // 不是内建的标签slot,component
+      isPlatformReservedTag(node.tag) && // 是普通HTML标签，不是组件
+      !isDirectChildOfTemplateFor(node) && //该节点的父辈节点不能是带v-for的 template
+      Object.keys(node).every(isStaticKey) //节点上不能出现额外的属性。type,tag,attrsList,attrsMap,plain,parent,children,attrs,start,end,rawAttrsMap以外的属性，出现以外的属性则当前节点不是静态节点
     ))
   }
 
+  // 如果想用v-if同时管控多个元素，可以<template>元素包裹这几个元素，在<template>上使用v-if，最终渲染结果不会包含<template>，它是不可见的。
+  // <template>上可以使用v-for的，可以循环渲染一段包含多个元素的内容，比如<ul><template v-for="item in items"><li>{{ item.msg }}</li> <li class="divider" role="presentation"></li></template></ul>
+
+  // 判断当前ast节点是否是使用了v-for的template节点的子节点。如果当前的ast节点没有父级，返回false，有父级则向父级寻找，如果遇到父辈节点是带v-for的template节点，那么返回true，如果没有遇到template节点，返回false
   function isDirectChildOfTemplateFor (node) {
     while (node.parent) {
       node = node.parent;

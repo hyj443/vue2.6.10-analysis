@@ -3874,14 +3874,7 @@
   var isReservedAttr = makeMap('style,class');
 
   var acceptValue = makeMap('input,textarea,option,select,progress');
-  var mustUseProp = function (tag, type, attr) {
-    return (
-      (attr === 'value' && acceptValue(tag)) && type !== 'button' ||
-      (attr === 'selected' && tag === 'option') ||
-      (attr === 'checked' && tag === 'input') ||
-      (attr === 'muted' && tag === 'video')
-    )
-  };
+  var mustUseProp = (tag, type, attr) => ((attr === 'value' && acceptValue(tag)) && type !== 'button' || (attr === 'selected' && tag === 'option') || (attr === 'checked' && tag === 'input') || (attr === 'muted' && tag === 'video'))
 
   var isEnumeratedAttr = makeMap('contenteditable,draggable,spellcheck');
 
@@ -7204,11 +7197,11 @@
   var platformGetTagNamespace;
   var maybeComponent;
   // 编译器：人为编写的高级语言所写的程序翻译成计算机能解读并运行的机器语言的程序。parser只是编译器的一部分，是对源代码处理的第一步。它是将普通的字符串转成一个对象的程序，这个对象是编译器能理解的，后续的句法分析、类型检查推导、代码优化、代码生成都依赖于这个抽象出来的对象，称为AST抽象句法树
-  // Vue的编译器大致分为3个阶段：词法分析->句法分析->代码生成。词法分析：把字符串模板解析成一个个的令牌(token)。句法分析：根据令牌生成一棵AST。最后根据该AST生成最终的渲染函数，这就是代码生成。先看词法分析，看看Vue是如何拆解字符串模板的。
+  // Vue的编译器大致分为3个阶段：1.将模板字符串转成元素ASTs对象。2.对AST进行静态节点标记，主要用来做虚拟DOM的渲染优化。3.使用元素ASTs生成渲染函数代码字符串。parse就是第一阶段，拆家模板字符串，进行词法分析。
   function parse(template, options) { // 主要通过调用parseHTML来辅助ast的构建
-    warn$2 = options.warn || baseWarn; // 打印警告信息
-    platformIsPreTag = options.isPreTag || no; //通过给定的标签名判断标签是否是pre标签
-    platformMustUseProp = options.mustUseProp || no //检测一个属性在标签中是否要使用元素对象原生的prop进行绑定
+    warn$2 = options.warn || baseWarn;
+    platformIsPreTag = options.isPreTag || no; // 判断标签是否是pre标签
+    platformMustUseProp = options.mustUseProp || no //检测一个属性在标签中是否要使用元素对象原生的prop进行绑定，这里的prop是元素对象的属性，不是Vue中prop的概念
     platformGetTagNamespace = options.getTagNamespace || no //获取元素的命名空间
     var isReservedTag = options.isReservedTag || no;
     maybeComponent = el => !!el.component || !isReservedTag(el.tag)
@@ -7216,84 +7209,77 @@
     preTransforms = pluckModuleFunction(options.modules, 'preTransformNode');
     postTransforms = pluckModuleFunction(options.modules, 'postTransformNode');
     delimiters = options.delimiters;
-    var stack = [] // 当解析到一个开始标签或文本，stack的栈顶元素永远是当前被解析的节点的父节点，通过stack就可以把当前节点push到父节点的children中，也可以把当前节点的parent属性设置为父节点
+    var stack = [] // 当解析到一个2元标签的开始标签就push进stack，stack的栈顶元素永远是当前被解析的节点的父节点，通过stack就可以把当前节点push到父节点的children中，也可以把当前节点的parent属性设置为父节点。解析到1元自闭合标签则不用推入stack中，因为它不存在子节点。
     var preserveWhitespace = options.preserveWhitespace !== false;
     var whitespaceOption = options.whitespace;
-    var root; //root就是ast树，parse的执行是为了充实root对象
-    var currentParent; //每遇到一个2元标签时，都会将该标签的描述对象作为currentParent的值，这样当解析这个2元标签的子元素时，子元素的父元素就是currentParent
+    var root; // 即ast树，parse的执行是充实root对象的过程
+    var currentParent; //每遇到一个2元标签，都会将描述该标签的ast对象赋给currentParent，当解析该2元标签的子元素时，子元素的父元素就是currentParent
     var inVPre = false; //当前解析的标签是否在v-pre标签之内
-    var inPre = false; //当前解析的标签是否在 <pre></pre>之内
-    var warned = false;
+    var inPre = false; //当前解析的标签是否在<pre></pre>之内
+    var warned = false; //warned的初始值为false
     function warnOnce (msg, range) {
-      if (!warned) { //warned的初始值为false，if进去就变为true
+      if (!warned) { //if语句块进去立即变为true
         warned = true;
         warn$2(msg, range) // 只会打印一次警告信息
       }
     }
-    //当遇到二元标签的结束标签或一元标签时调用，“闭合”标签
-    function closeElement (element) { // 传入的是1元标签所对应的el对象，或2元标签对应el对象
+    //当遇到二元标签的结束标签或一元标签时调用它，“闭合”标签，传入标签对应的ast对象
+    function closeElement (element) {
       trimEndingWhitespace(element) // 你要闭合一个标签，那么它的末尾子节点有可能是空文本节点，要把它从元素描述对象的children数组中弹出
-      if (!inVPre && !element.processed) {//你要闭合的标签不处于v-pre之中，且没被解析过
+      if (!inVPre && !element.processed) {//你要闭合的标签不处于v-pre之中，即不会被跳过编译，且没被解析过
         element = processElement(element, options) //处理元素描述对象上的一些属性
       }
-      if (!stack.length && element !== root) { //我们知道每遇到一个2元标签的开始标签就会将它的描述对象推入stack中，每遇到一个结束标签时都会将它的描述对象从stack中弹出。如果只有一个根元素，正常解析完一段html代码后，stack应该为空，或者说，当stack被清空则说明整个模板字符串已经解析完。现在当前解析的元素是root元素，则stack一定为空，如果当前解析的不是根元素，且stack为空，则说明模板中有不止一个根元素，只是现在解析的没有被当做root。
-        // 事实上，满足一定条件是可以定义几个根元素的，但root始终指向第一个根元素的描述对象，如果不满足条件，则会报警说不能定义多个根元素
-        if (root.if && (element.elseif || element.else)) {//root第一个定义的根元素用了v-if，当前元素用了v-else-if/v-else，这样所有的根元素都是由v-if/v-else-if/v-else等控制，间接保证了被渲染的根元素只有一个
+      if (!stack.length && element !== root) { //我们知道每遇到一个2元标签的开始标签就会将它的描述对象推入stack中，每遇到一个结束标签时都会将它的描述对象从stack中弹出。只有一个根元素的情况下，如果当前解析的元素是根元素，按理stack一定是空的，如果当前解析的元素不是根元素，按理stack一定有元素。如果当前解析的不是根元素，但stack为空，则说明模板中有不止一个根元素，现在解析的没有被当做root
+        // 所以满足上面条件的话，说明当前模板不止一个根元素，事实上，满足真正的根元素用了v-if，当前根元素用了v-else-if/v-else，这样就能存在多个根元素但最终只会渲染第一个根元素，如果不满足，则会报警。
+        if (root.if && (element.elseif || element.else)) {//root始终指向第一个根元素的描述对象
           checkRootConstraints(element); //检查当前元素是否符合作为根元素的要求
+          //使用了v-else-if/v-else的元素的描述对象会被添加到使用了v-if的元素的描述对象的ifConnditions数组中，而且使用了v-if的元素也会将自身的描述对象，添加到它自己的fConditions数组中
           addIfCondition(root, {
             exp: element.elseif,
             block: element
-          });//具有v-else-if/v-else属性的元素的描述对象会被添加到具有v-if属性的元素描述对象的ifConnditions数组中。后面你会发现有v-if的元素也会将自身的元素描述对象添加到自己的ifConditions数组中
-        } else { //如果条件不满足，会给出友好提示
+          })
+        } else { //根元素没有用v-if，或当期元素没用v-else-if/v-else，报错
           warnOnce("组件模版必须包含一个根节点。你可以定义多个根元素，但必须保证最终只渲染其中一个", { start: element.start })
         }
       }
+      // 当期要闭合的元素存在父元素，且当前元素不是被禁止(不被解析)的元素。则考察当前元素如果用了v-else-if/v-else，调用processIfConditions找到它上一个使用了v-if到元素，将当前元素的ast对象添加到对应的使用了v-if的元素ast对象的ifConditions数组中，而不会成为父元素的子节点。
       if (currentParent && !element.forbidden) {
-        // 当前要闭合的元素存在父级，并且当前元素不是被禁止的元素
-        if (element.elseif || element.else) { //如果当前元素用了v-else-if/v-else，检查上一个元素有没有使用v-if。当前元素是不会成为父级的子节点的，而是会被添加到相应的用了v-if的元素描述对象的ifConditions中
+        if (element.elseif || element.else) {
           processIfConditions(element, currentParent)
-        } else { //如果当前元素没有使用v-else-if/v-else，会被推入父级的children数组中
+        } else {//如果当前元素没有使用v-else-if/v-else，则当前元素的描述对象会被推入父级描述对象的children数组中，同时当前ast对象的parent属性的值设为父级描述对象，如此建立了元素ast对象之间的父子关系
           if (element.slotScope) { //如果用了slot-scope特性
             var name = element.slotTarget || '"default"';//将当前元素描述对象添加到父级元素的scopedSlots对象下
             (currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element;
           }
-          currentParent.children.push(element);//把当前的元素描述对象推入父级描述对象的children数组中
-          element.parent = currentParent;//同时将当前元素描述对象的parent属性指向父级元素对象，这样就建立了元素描述对象间的父子关系
+          currentParent.children.push(element);
+          element.parent = currentParent;
         }
       }
-
       element.children = element.children.filter((c) => !(c).slotScope)
-      trimEndingWhitespace(element);
-      if (element.pre) {
-        inVPre = false;
-      }
-      if (platformIsPreTag(element.tag)) {// 判断当前元素是否是<pre>。实际上inPre与inVPre的作用相同，inPre标识当前解析环境是否在 <pre>内，因为<pre>内的解析行为与其他 =html标签不同。体现在：<pre>会对其包含的html字符实体进行解码。<pre>会保留html字符串编写时的空白
-        inPre = false;
-      }
+      trimEndingWhitespace(element)
+      // 如果当前标签使用了v-pre，闭合标签时要将inVPre重置为false。每遇到<pre>标签的开始标签时，会将inPre设为true，这代表后续解析所遇到的标签都处于<pre>之中，pre标签中所有内容解析完毕，要“闭合”标签，会将inPre重置为false。
+      if (element.pre) inVPre = false; //当前标签使用了v-pre
+      if (platformIsPreTag(element.tag)) inPre = false // 当前标签是<pre>
       for (var i = 0; i < postTransforms.length; i++) {
         postTransforms[i](element, options);
       }
     }
-    function trimEndingWhitespace (el) {
-      if (!inPre) { // 如果解析的元素不是出于pre标签中
-        var lastNode;
-        while ( // 取出el.children数组的最后一项，即末尾子节点存在
-          (lastNode = el.children[el.children.length - 1]) &&
-          lastNode.type === 3 && // 末尾子节点的类型是文本元素
-          lastNode.text === ' ' // 末尾子节点是一个空格的字符串
-        ) { // while循环把末尾的可能存在的所有空格去掉
-          el.children.pop(); // 把代表空格的末尾文本节点从children数组中弹出
-        }
+    function trimEndingWhitespace(el) { // 找到当前节点的末尾子节点，如果它是一个空格的静态文本节点，就将它从当前节点的子节点children数组中弹出，因为开启的while循环，会把末尾的可能存在的所有空格对应的子节点都去掉
+      if (inPre) return // 如果解析的元素处于pre标签中，直接返回。因为<pre>中的文本会按照原文件中的编排，空白符比如空格和换行符都会展示显示出来，不需要去去除空格
+      var lastNode
+      while ((lastNode = el.children[el.children.length - 1]) && lastNode.type === 3 && lastNode.text === ' ') { 
+        el.children.pop()
       }
     }
 
-    // 检查当前元素是否符合根元素的要求。我们知道编写模板时有几个约束：1模板有且仅有一个被渲染的根元素，2是不能使用slot标签和template标签作为模板的根元素，不能是slot和template标签作为根元素，因为slot作为插槽，它的内容是外界决定的，插槽的内容可能渲染多个节点，template元素的内容虽然不是外界决定的，但它本身作为抽象组件不会渲染任何内容到页面，它有可能包含多个子节点。3根元素是不允许使用v-for的，因为会渲染出多个节点。这些限制都是基于必须有且只有一个根元素
+    // 检查当前元素是否符合根元素的要求。2个约束都基于模板有且仅有一个被渲染的根元素：1是不能使用slot标签和template标签作为根元素，因为slot作为插槽，它的内容是外界决定的，插槽的内容可能渲染多个节点，template元素的内容虽然不是外界决定的，但它本身作为抽象组件不会渲染任何内容到页面，它有可能包含多个子节点。2根元素是不允许使用v-for的，因为会渲染出多个节点
     function checkRootConstraints(el) {
-      if (el.tag === 'slot' || el.tag === 'template') warnOnce(`Cannot use <${el.tag}> as component root element because it may contain multiple nodes.`)
-      if (el.attrsMap.hasOwnProperty('v-for')) warnOnce('Cannot use v-for on stateful component root element because it renders multiple elements.')
+      if (el.tag === 'slot' || el.tag === 'template')
+        warnOnce(`Cannot use <${el.tag}> as component root element because it may contain multiple nodes.`)
+      if (el.attrsMap.hasOwnProperty('v-for'))
+        warnOnce('Cannot use v-for on stateful component root element because it renders multiple elements.')
     }
-    
-    // parseHTML的调用接收几个重要的钩子函数，主要是start end这两个钩子，对模版字符串做词法解析，parse在此基础上做句法分析，生成一颗AST
+    // 调用parseHTML函数，传入几个重要的钩子函数，在parseHTML内部会调用这几个钩子函数，对模版字符串做解析，生成一颗AST树
     parseHTML(template, {
       warn: warn$2,
       expectHTML: options.expectHTML,
@@ -7309,7 +7295,8 @@
         if (isIE && ns === 'svg') {// handle IE svg bug
           attrs = guardIESVGBug(attrs);
         }
-        let element = createASTElement(tag, attrs, currentParent) // 创建元素节点的描述对象
+        // 每解析一个开始标签就创建一个ast节点对象，它存储当前标签的attrs，tagName等信息，并且会把当前ast对象推入到父节点的children中，同时当前的ast的parent设置为stack的栈顶元素
+        let element = createASTElement(tag, attrs, currentParent)
         if (ns) { //如果当前解析的开始标签是svg/math标签/它们的子标签
           element.ns = ns; //都会比其他标签的元素描述对象多一个ns属性
         }
@@ -7323,7 +7310,7 @@
         }
         attrs.forEach(function (attr) {
           if (invalidAttributeRE.test(attr.name)) {
-            warn$2("Invalid dynamic argument expression: attribute names cannot contain spaces, quotes, <, >, / or =.", { 
+            warn$2("Invalid dynamic argument expression: attribute names cannot contain spaces, quotes, <, >, / or =.", {
                 start: attr.start + attr.name.indexOf("["),
                 end: attr.start + attr.name.length
               }
@@ -7332,60 +7319,54 @@
         });
         if (isForbiddenTag(element) && !isServerRendering()) {
           element.forbidden = true; //给禁止的元素打上禁止标记
-          warn$2(`模版只负责将状态映射到视图。避免在模板中使用带有副作用的标签，例如<style>和没有指定type属性或type属性值为text/javascript的<script>，它们不会被解析`);
+          warn$2(`模版只负责将状态映射到视图。避免在模板中使用例如<style>和没有指定type属性或type属性值为text/javascript的<script>标签，它们不会被解析`);
         }
         // apply pre-transforms
         for (var i = 0; i < preTransforms.length; i++) {
           element = preTransforms[i](element, options) || element;
         }
-        if (!inVPre) { // 当前解析的元素不处于v-pre环境中，调用processPre检查它自己是否使用v-pre，这决定了它和它的子元素是否处于v-pre环境
-          processPre(element); // 如果该元素用了v-pre，给描述它的el对象添加pre属性
-          if (element.pre) {// 如果当前元素用了v-pre，则将inVPre变真，意味着后续的所有解析工作都处于v-pre指令下，编译器就会跳过拥有v-pre的元素和它子元素，不对它们进行编译
-            inVPre = true
-          }
+        // 如果当前解析元素不处于v-pre环境中，调用processPre检查它自己是否使用v-pre，这决定了它和它的子元素是否处于v-pre环境，如果使用了v-pre，给描述它的ast对象添加pre属性，并将inVPre变为true，意味着后续解析工作都处于v-pre中，就不会对处于v-pre的元素进行编译。同样的，如果当前元素是pre标签，也将inPre置为true
+        if (!inVPre) {
+          processPre(element)
+          if (element.pre) inVPre = true
         }
         if (platformIsPreTag(element.tag)) inPre = true;
-      
-        if (inVPre) { // 如果当前元素的解析处于v-pre环境中
-          processRawAttrs(element);//调用processRawAttrs对元素描述对象进行加工
-        } else if (!element.processed) {//当前元素的解析没有处于v-pre环境，且没有被解析过
-          processFor(element); // 解析使用了v-for的开始标签
-          processIf(element);// 解析使用了v-if/v-else-if/v-else指令的开始标签
-          //总结1、如果标签用了v-if，则该标签的元素描述对象会有if属性，值为v-if的属性值
-          //2、如果标签使用了v-else，则该标签的元素描述对象会有else属性，值为 true
-          //3、如果标签使用了v-else-if，则该标签的元素描述对象有elseif属性，值为v-else-if的属性值
-          //4、如果标签使用了v-if，则该标签的元素描述对象的ifConditions数组中包含“自己”
-          //5、如果标签使用了v-else/v-else-if，则该标签的元素描述对象会被添加到对应的有v-if的元素描述对象的ifConditions数组中。
-          processOnce(element); //处理使用了v-once指令的标签
-          // v-for v-if/v-else-if/v-else v-once被认为是结构化指令。它们经过processFor、processIf、processOnce处理后，会把这些指令从元素描述对象的attrsList数组中移除，因为它们的属性值并不承载内容信息。
+        // 如果当前解析的元素处于v-pre之中，用processRawAttrs处理HTML的原生属性。如果当前元素不是处于v-pre，且没有被解析过，就开始解析v-for、v-if/v-else-if/v-else、v-once指令，这些都是结构化指令，它们的属性值不承载内容信息，处理完后这些指令会从元素ast对象的ttrsList数组中移除。
+        if (inVPre) { 
+          processRawAttrs(element);
+        } else if (!element.processed) {
+          processFor(element)
+          processIf(element)
+          processOnce(element)
         }
-        if (!root) { //root未定义，说明还没开始填充ast树，说明当前解析的是根元素
-          root = element; // 直接把当前的元素描述对象赋给root
-          checkRootConstraints(root); //检查根元素是否符合要求
+        if (!root) {
+          root = element;
+          checkRootConstraints(root);
         }
-        if (!unary) {//如果是2元标签，则将当前el推入栈stack，并将当前解析元素的父元素指向stack的栈顶元素
+        // 如果root还没定义，还没被赋值，说明当前解析的是根元素，直接把当前元素ast对象赋给root，然后检查它是否符合根元素的要求
+        if (!unary) {
           currentParent = element
           stack.push(element);
-        } else { // 如果是1元标签，调用closeElement钩子函数闭合该元素
-          closeElement(element); //不往stack推是因为1元标签不能成为父节点
+        } else {
+          closeElement(element)
         }
+        // 如果是2元标签的开始标签，则将currentParent更新为当前ast对象，并将当前ast对象推入stack，于是currentParent就继续指向stack的栈顶元素。如果遇到的是1元标签，则不会将它往stack推入，因为它成为不了父节点，会调用closeElement钩子函数闭合该元素
       },
-      end(tag, start, end$1) { // 解析html字符串时每遇到一个2元标签的结束标签时，调用钩子函数end，将currentParent回退为之前的值，这样就修正了当前元素的父级元素，不会把兄弟元素当父级元素了
-        var element = stack[stack.length - 1] // 获取栈顶元素
-        stack.length -= 1; // 栈弹出一个元素描述对象
-        currentParent = stack[stack.length - 1]; // currentParent指向栈顶
-        if (options.outputSourceRange) {
-          element.end = end$1;
-        }
-        closeElement(element) // 调用closeElement结束
+      // 每遇到一个2元标签的结束标签时，调用钩子函数end，将currentParent回退为之前的值(stack弹出栈顶元素，将currentParent指向栈顶)，这样就修正了当前元素的父元素，不会把兄弟元素当父级元素了。然后调用closeElement闭合标签
+      end(tag, start, end$1) { 
+        var element = stack[stack.length - 1]
+        stack.length -= 1
+        currentParent = stack[stack.length - 1]
+        if (options.outputSourceRange) element.end = end$1
+        closeElement(element)
       },
-
-      // 解析html字符串时每次遇到纯文本时就会调用chars函数
+      // 每次遇到纯文本时就会调用chars函数
       chars(text, start, end) {
-        if (!currentParent) { //当前解析的是文本没有父元素包裹，直接像根元素那样存在，是不允许的，报错并return
-          if (text === template) { // 如果处理的html字符串正好就是这段纯文本，即<template>{{name}}fefe</template>这样，会报错
+        // 当前解析的文本没有父元素包裹，直接像根元素那样存在，这是不可以的，会报错并直接返回。其中分为两种情况：处理的html字符串正好全是这段文本，没有别的元素，报错：需要一个根元素，不能只是文本；有根元素，但也有文本存在，报错：处于根元素之外的文本会被忽略
+        if (!currentParent) {
+          if (text === template) {
             warnOnce('组件模板需要一个根元素，而不仅仅是文本', { start })
-          } else if ((text = text.trim())) { // 将处理的纯文本去掉空格后仍存在文本，会提示：
+          } else if ((text = text.trim())) {
             warnOnce("处于根元素之外的文本\"" + text + "\"会被忽略的", { start })
           }
           return
@@ -7393,9 +7374,10 @@
         if (isIE && // ie浏览器有个bug，如果当前解析的文本的父级是textarea标签，并且textarea标签的placeholder的值为当前text，则无需记录这段文本text
           currentParent.tag === 'textarea' && currentParent.attrsMap.placeholder === text) return
         var children = currentParent.children; // 获取当前文本的父级的children
-        if (inPre || text.trim()) { //如果处于pre标签的环境中，或text trim后还有值
-          text = isTextTag(currentParent) ? text : decodeHTMLCached(text)//父级是script或style标签的话，不对text中的字符实体(比如'&#x26;')进行解码
-        } else if (!children.length) { // 如果父级的没有子元素，让text为空字符串
+        // 如果当前处于pre标签中，或文本trim后还有值，父元素是否是script或style元素，如果是，不做处理，如果不是，对text中的字符实体(比如 &#x26;)进行解码。如果不处于pre标签中，且trim后text为空，如果父元素没有子元素，让text为空字符串
+        if (inPre || text.trim()) {
+          text = isTextTag(currentParent) ? text : decodeHTMLCached(text)
+        } else if (!children.length) {
           text = '';
         } else if (whitespaceOption) {
           if (whitespaceOption === 'condense') {
@@ -7406,23 +7388,27 @@
         } else {
           text = preserveWhitespace ? ' ' : '';
         }
-        if (text) { //经过了上面的处理，如果text还存在
-          if (!inPre && whitespaceOption === 'condense') {
+        // 经过了上面的处理，如果text还存在
+        if (text) {
+          if (!inPre && whitespaceOption === 'condense')
             text = text.replace(whitespaceRE$1, ' ');
-          }
-          var res;
-          var child;
+          var res, child;
+          // 如果当前解析不处在v-pre之中，且text不为' '，调用parseText对text中的插值文本做解析，解析结果赋给res，如果res有值，创建一个child对象来描述这个带变量的动态文本节点，type类型为2。
           if (!inVPre && text !== ' ' && (res = parseText(text, delimiters))) {
-            //如果当前解析不处在v-pre之中，且text不为一个空格的字符串，调用parseText对text文本做解析(解析插值符号里的文本)，解析结果赋给res，res有值，创建一个对象child
             child = {
-              type: 2, // type:2代表这是带变量的动态文本ast节点
+              type: 2,
               expression: res.expression,
               tokens: res.tokens,
               text // text属性存放未经parseText的文本
             };
-          } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') { //
-            child = { type: 3, text };
+            // text不为' '或父节点没有子节点，或父节点的末尾子文本节点不是' '，创建一个child对象来描述不带变量的静态文本节点，type类型为3
+          } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
+            child = {
+              type: 3,
+              text
+            }
           }
+          // 如果child存在，将它push进父节点的children数组中
           if (child) {
             if (options.outputSourceRange) {
               child.start = start;
@@ -7432,47 +7418,47 @@
           }
         }
       },
-      // 解析html字符串每次遇到注释节点会调用该函数。如果它有父元素，创建一个ast对象child，type属性值为3，代表它是不带变量的纯文本节点，text属性为它的文本内容，isComment为真代表它是注释节点。然后把child对象推入父元素currentParent的children数组中，建立父子关系
+      // 每遇到注释节点会调用comment。如果没有父元素，则直接返回。创建一个ast对象child，type属性值为3，代表它是不带变量的纯文本节点，text属性为它的文本内容，isComment为真代表是注释节点。然后把child对象推入父元素currentParent的children数组中，建立父子关系
       comment(text, start, end) {
-        if (currentParent) {
-          var child = { type: 3, text, isComment: true }
-          if (options.outputSourceRange) {
-            child.start = start;
-            child.end = end;
-          }
-          currentParent.children.push(child);
+        if (!currentParent) return
+        var child = {
+          type: 3,
+          text,
+          isComment: true
         }
+        if (options.outputSourceRange) {
+          child.start = start;
+          child.end = end;
+        }
+        currentParent.children.push(child);
       }
     });
     return root
   }
-  // 下面process系列的函数用在parseHTML函数的钩子函数中，都是让一个元素描述对象更能详细地描述一个元素
-
-  function processPre (el) { // 处理使用了v-pre的标签
-    if (getAndRemoveAttr(el, 'v-pre') != null) { // 同时会把el对象的attrsList数组中的v-pre对应的键值对删除，然后给el对象添加pre属性，值为true
-      el.pre = true
-    }
+  // 处理v-pre指令，如果元素使用了v-pre指令，给el对象添加pre属性，值为true
+  function processPre (el) {
+    if (getAndRemoveAttr(el, 'v-pre') != null) el.pre = true
   }
 
-  // processRawAttrs作用是将该元素所有属性全部作为原生的属性(attr)处理
+  // 元素处于v-pre环境下，调用processRawAttrs将该元素所有属性全部作为原生的属性处理，首先获取el对象的attrsList数组，如果元素没有任何属性，且没有使用v-pre，但它的父级用了v-pre指令，则给el对象上添加plain属性，值为true。
   function processRawAttrs (el) {
-    var list = el.attrsList; // 获取el对象的attrsList数组
-    var len = list.length; 
-    if (len) { // len存在，说明该元素的开始标签上有属性，要将属性值彻底变废(普通字符串)
+    var list = el.attrsList; 
+    var len = list.length;
+    // 该元素有属性，要将属性值强行变为普通字符串，首先创建一个长度和el.attrsList一样的数组attrs，遍历el.attrsList数组中的每个属性，将这些属性以对象的形式放入attrs数组中，包含属性名name和属性值value。list[i].value作为属性值，已经是字符串，还再JSON.stringify是为了最终生成的函数代码中，它始终是普通字符串而不是表达式。因为经过new Function转化之后，list[i].value可能变成代码字符串，而JSON.stringify(list[i].value)变成普通字符串，processRawAttrs函数的执行是在v-pre环境中，会将它的属性全部添加到el.attrs数组中，它唯一不同于attrsList数组是每个对象的value值都是JSON.stringify过，最后它被转成了字符串而不是表达式，所以跳过了被渲染，达到v-pre的目的
+    if (len) {
       var attrs = el.attrs = new Array(len)
-      for (var i = 0; i < len; i++) { //遍历el.attrsList数组中的每个属性
-        attrs[i] = { //将这些属性以对象形式挪到attrs数组中
+      for (var i = 0; i < len; i++) {
+        attrs[i] = {
           name: list[i].name,
-          value: JSON.stringify(list[i].value) //list[i].value已是字符串，还JSON.stringify是保证最终生成的代码中“属性值”始终是普通字符串而不是代码语句，因为经过new Function转化之后，list[i].value就可能变成代码字符串，而JSON.stringify(list[i].value)就变成普通字符串，processRawAttrs函数的执行是在v-pre环境中，会将它的属性全部添加到el.attrs数组中，它唯一不同于attrsList数组是attrs数组中每个对象的value值都是JSON.stringify过，那么最后它被转成了字符串而不是代码，所以渲染被跳过了，达到了v-pre的目的
+          value: JSON.stringify(list[i].value) 
         }
         if (list[i].start != null) {
           attrs[i].start = list[i].start;
           attrs[i].end = list[i].end;
         }
       }
-      //processRawAttrs的执行说明当前解析的元素处于v-pre环境中，要么是使用v-pre指令的标签自身，要么是它的子节点。如果len不存在，即该元素没有任何属性，如果该元素没有使用v-pre指令，说明该元素一定是作为子标签处于v-pre指令的环境下
-    } else if (!el.pre) { // 该元素没有任何属性，且没有使用v-pre，但它的父级标签用了v-pre
-      el.plain = true;//给el对象上添加plain属性，并置为true，标识该元素是纯的
+    } else if (!el.pre) { 
+      el.plain = true
     }
   }
 
@@ -7559,25 +7545,25 @@
   }
 
   function processIf(el) {
-    var exp = getAndRemoveAttr(el, 'v-if');//获取v-if指令的值
-    if (exp) { // 如果v-if属性值存在，给el添加if属性值为v-if的属性值
+    var exp = getAndRemoveAttr(el, 'v-if') // 获取v-if指令的值 exp
+    // 如果exp存在，给el添加if属性，值为exp，然后把它自身的元素ast对象el，添加到el的ifConditions数组中。如果exp不存在，则会判断v-else，如果v-else的属性值存在，给el添加else属性，值为true。再判断v-else-if如果它的属性值存在，给el添加elseif属性，值为v-else-if的属性值。可见，对于使用v-else/v-else-if的标签，processIf只是给el添加了else/elseif属性，没有做别的。但在闭合标签时调用processIfConditions时，如果一个元素ast对象有else/elseif属性时，则它不会作为AST对象的一个节点，而是会被添加到相应的使用v-if的元素ast对象的ifConditions数组中
+    if (exp) {
       el.if = exp
-      // 如果元素使用了v-if，会把包含它自身的元素描述对象el添加到el的ifConditions属性数组
       addIfCondition(el, {
         exp,
         block: el
       })
-    } else { //v-if属性值不存在，就会看看v-else
-      if (getAndRemoveAttr(el, 'v-else') != null) { // v-else的属性值存在
-        el.else = true; //给el添加else属性，值为true
-      }
+    } else {
+      if (getAndRemoveAttr(el, 'v-else') != null) el.else = true
       var elseif = getAndRemoveAttr(el, 'v-else-if');
-      if (elseif) { //如果v-else-if的属性值存在 
-        el.elseif = elseif //在el添加elseif属性，值为v-else-if的属性值
-      }
+      if (elseif) el.elseif = elseif 
     }
-    // 注意，对于用了v-else/v-else-if的标签，经过processIf处理后仅仅是添加了else/elseif属性，没有做额外的工作。但是processIfConditions函数时，当一个元素描述对象有else/elseif属性时，该元素描述对象不会作为AST中的一个普通节点，而是会被添加到相应的有v-if的元素描述对象的ifConditions数组中。即：解析模版时，对于使用v-else/v-else-if的标签，并没有把它们的元素描述对象添加到ast树中，而是添加到最近的v-if的元素描述对象的ifConditions属性里
   }
+  //总结1、如果标签用了v-if，则该标签的元素描述对象会有if属性，值为v-if的属性值
+  //2、如果标签使用了v-else，则该标签的元素描述对象会有else属性，值为 true
+  //3、如果标签使用了v-else-if，则该标签的元素描述对象有elseif属性，值为v-else-if的属性值
+  //4、如果标签使用了v-if，则该标签的元素描述对象的ifConditions数组中包含“自己”
+  //5、如果标签使用了v-else/v-else-if，则该标签的元素描述对象会被添加到对应的有v-if的元素描述对象的ifConditions数组中。
 
   // 处理使用了v-else/v-else-if的元素的解析
   function processIfConditions(el, parent) {
@@ -7878,19 +7864,15 @@
     return map
   }
 
-  // 对于script or style元素，不要解码它的内容
-  function isTextTag (el) {
-    return el.tag === 'script' || el.tag === 'style'
-  }
+  // 对于script/style元素，不要解码它的内容
+  function isTextTag(el) { return el.tag === 'script' || el.tag === 'style' }
 
-  function isForbiddenTag (el) { //接收一个元素描述对象
-    return ( //返回true代表该标签被禁止
-      el.tag === 'style' ||
-      (el.tag === 'script' && (
-        !el.attrsMap.type ||
+  function isForbiddenTag(el) { //这些标签会打上禁止标记，它们不会被解析
+    return el.tag === 'style' || // style标签不会被解析
+      (el.tag === 'script' && ( // 没有type属性的script标签不会被解析
+      !el.attrsMap.type || // type属性为text/javascript的script标签不会被解析
         el.attrsMap.type === 'text/javascript'
       ))
-    )
   }
 
   var ieNSBug = /^xmlns:NS\d+/;
@@ -8065,7 +8047,7 @@
     if (node.static || node.once) {//如果是静态节点或是一次性节点，给节点添加staticInFor属性，赋给它isInFor，代表这个是不是处于v-for之中
       node.staticInFor = isInFor;
     }
-    if (//如果当前节点是静态节点，
+    if (//如果当前节点是静态节点，且存在子节点
       node.static && node.children.length &&
       !(node.children.length === 1 &&
         node.children[0].type === 3)

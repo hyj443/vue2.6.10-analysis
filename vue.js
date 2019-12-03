@@ -3610,7 +3610,7 @@
       return this
     };
   }
-
+  // 
   function initMixin$1(Vue) { 
     Vue.mixin = function (mixin) { // 接收用户传入的options对象，和Vue.options合并在一起，并覆盖Vue.options
       this.options = mergeOptions(this.options, mixin) //因为创建的vm实例都会用到Vue.options属性，所以Vue.mixin调用后，Vue.options更新，会影响之后创建的每个vm实例
@@ -3620,103 +3620,85 @@
 
   // 定义Vue.extend方法，用来创建一个Vue的子类。
   function initExtend(Vue) {
-    Vue.cid = 0; // Vue构造函数的cid为0
-    var cid = 1; // 每个实例的构造函数(包括Vue)都有唯一的cid
-    Vue.extend = function (extendOptions = {}) { //Vue.extend接收一个选项对象
-      //Sub.extend=Super.extend，即extend是每个构造器都有的方法，它里面的this指向调用它的构造器
-      var Super = this; // Super指向调用extend的构造器，可以理解为父类
+    // Vue构造函数的cid为0，每个实例的构造函数(包括Vue)都有唯一的cid
+    Vue.cid = 0
+    var cid = 1
+    // Vue.extend是每个实例构造器都有的方法，它的this指向调用extend的构造器，定义为Super(可以理解为父类)，Vue.extend接收一个选项对象extendOptions
+    Vue.extend = function (extendOptions = {}) {
+      var Super = this
       var SuperId = Super.cid // 父类的cid
       var cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {})
-      //扩展选项对象的_Ctor属性是一个专门缓存构造器的对象，避免重复创建子构造器
-      if (cachedCtors[SuperId]) {// 如果缓存构造器对象中已存在该构造器，直接返回它
-        return cachedCtors[SuperId]
+      //扩展选项对象的_Ctor属性是一个专门缓存构造器的对象，避免重复创建子构造器，根据SuperId发现已经缓存了该构造器，就直接返回它
+      if (cachedCtors[SuperId]) return cachedCtors[SuperId]
+      // 获取extendOptions的name属性值，如果没有，获取父级选项对象的name值，组件就是一个构造函数，name值即为组件名，如果name存在，校验它是否是合法的组件名
+      var name = extendOptions.name || Super.options.name
+      if (name) validateComponentName(name)
+      // 定义子类构造函数Sub，和Vue一样，Sub实例化时会调用Vue的原型方法_init进行初始化，this指向SUb实例，定义了Sub构造器后，要让它继承父类
+      var Sub = function (options) {
+        this._init(options)
       }
-      var name = extendOptions.name || Super.options.name //获取扩展选项对象的name属性值，如果没有，获取父级选项对象的name属性值，组件其实就是一个构造函数，name属性就是组件名
-      if (name) validateComponentName(name) // name存在，校验name是否是合法的组件名
-      var Sub = function (options) {// 创建子类构造函数Sub
-        this._init(options); // Sub实例化时this指向Sub实例，调用Vue的原型方法_init进行初始化
-      }
-      // 定义了子构造函数Sub后，我们要让它继承父类(包括Vue)
-      Sub.prototype = Object.create(Super.prototype);//创建一个新对象，指定它的原型对象是Super.prototype，于是这个对象除了__proto__没有别的属性，__proto__值为Super.prototype。这个对象赋给Sub.prototype，即Super.prototype.__proto__===Super.prototype，即Sub的原型通过__proto__指向父类的原型
-      Sub.prototype.constructor = Sub; // Sub的原型是Object.create创建的这个对象，它除了__proto__没有别的属性，即没有constructor属性，但作为构造函数的prototype，它应该有一个constructor属性，指向构造函数本身Sub，两步操作就实现了子类Sub继承父类Super
-      Sub.cid = cid++; // 给子类添加cid属性
-      Sub.options = mergeOptions(Super.options, extendOptions) // 给子类添加options属性，就像Vue.options一样，但它的options值是合并了父类options和extend接收的扩展选项对象的
-      Sub['super'] = Super; // 给子类Sub添加super属性，值为父类
-      var props = Sub.options.props // 获取子类的options的props
-      if (props) { // 如果有props对象，遍历props对象，交给子类的原型的_props属性代理
+      // 首先创建一个新对象，指定它的原型对象是Super.prototype，于是这个对象除了__proto__没有别的属性，__proto__指向Super.prototype。将这个对象赋给Sub.prototype，即Sub.prototype.__proto__===Super.prototype，即Sub的原型通过__proto__指向父类的原型。Sub.prototype现在只有__proto__属性，没有constructor属性，但它作为构造函数的原型对象，应该有一个constructor属性，让它手动指向构造函数本身，Sub。这两步操作实现子类Sub继承父类Super
+      Sub.prototype = Object.create(Super.prototype)
+      Sub.prototype.constructor = Sub
+      // 给子类Sub添加options属性，值是合并了父类options和接收的扩展选项对象的对象。给子类Sub添加super属性，值为父类
+      Sub.options = mergeOptions(Super.options, extendOptions)
+      Sub['super'] = Super
+      // 获取子类Sub的options的props，如果有props对象，遍历它，交给Sub的原型的_props属性代理，这样子类Sub的实例.prop名 就能访问prop的值
+      var props = Sub.options.props
+      if (props) { 
         for (var key in props) {
-          proxy(Sub.prototype, "_props", key) //子类的实例.prop名 就能访问prop的值
+          proxy(Sub.prototype, "_props", key)
         }
       }
-      var computed = Sub.options.computed; // 获取获取子类的options的computed对象
-      if (computed) { // 存在，则遍历computed对象，将计算属性定义在子类的原型上
+      // 获取子类Sub的options的computed对象，如果存在，则遍历它，将计算属性定义在Sub的原型上。将props和计算属性定义在子类Sub的原型上，是为了避免每次创建子类的实例时，都要定义props和计算属性，Sub的实例可以通过原型链在Sub.prototype上读取相应的值
+      var computed = Sub.options.computed
+      if (computed) {
         for (var key in computed) {
           defineComputed(Sub.prototype, key, computed[key]);
         }
       }
-      // 之所以将props和计算属性定义在子类Sub的原型上，是为了避免每次创建子类的实例时，都要定义props和计算属性，因为子类的实例可以通过原型链在原型对象上读取相应的值
-      Sub.extend = Super.extend;// 子类也添加父类的extend、mixin、use方法
-      Sub.mixin = Super.mixin; // 这样子类就和父类一样具有扩展、混入、使用插件的能力
+      // 给子类Sub也添加父类的extend、mixin、use方法，这样子类也具备扩展、混入、使用插件的能力。给子类Sub添加Sub.component、Sub.filters等全局方法，允许子类有私有资源
+      Sub.extend = Super.extend
+      Sub.mixin = Super.mixin
       Sub.use = Super.use;
-      ASSET_TYPES.forEach(function (type) {//'component' 'directive' 'filter'
-        Sub[type] = Super[type] // 给子类添加Sub.component等全局方法，允许子类有私有资源
+      ASSET_TYPES.forEach(function (type) {
+        Sub[type] = Super[type]
       });
-      if (name) { // name代表了组件构造函数的组件名，如果存在，将它保存在options的components对象中，对应的值为构造器Sub
-        Sub.options.components[name] = Sub;
-      }
-      Sub.superOptions = Super.options; // superOptions存父类的options
-      Sub.extendOptions = extendOptions; // 存extend时传入的选项对象，即子类扩增的options
-      Sub.sealedOptions = extend({}, Sub.options) //Sub.options是合并了父类options的和扩增的options的，通过extend将它拷贝到一个新的对象中，然后把新对象赋给Sub.sealedOptions，存放Sub当前的options
-      cachedCtors[SuperId] = Sub // 最后将创建好的子类Sub在缓冲构造函数对象中记录一下
+      // name是组件构造器的组件名，如果存在，将它保存在Sub.options.components对象中，name为属性名，值为构造器Sub
+      if (name) Sub.options.components[name] = Sub;
+      // Sub的superOptions属性存父类的options，extendOptions属性存extend时传入的扩展选项对象，sealedOptions属性存Sub.options的一份深拷贝，Sub.options是合并了父类options的和扩增的options的，即当前Sub的options
+      Sub.superOptions = Super.options;
+      Sub.extendOptions = extendOptions;
+      Sub.sealedOptions = extend({}, Sub.options)
+      cachedCtors[SuperId] = Sub // 子类Sub创建好了，在缓冲构造函数对象中记录一下
       return Sub // extend函数返回出创建出来的子类
     }
   }
 
-  // Vue也允许注册自定义指令。在Vue中代码复用和抽象的主要形式是组件。然而有的情况，你仍然需要对普通DOM元素进行底层操作，这时候就会用到自定义指令。注册或获取全局指令的api是Vue.directive
-  /*Vue.directive('my-directive', {这个叫指令定义对象，提供5个可选钩子
-      bind(){}, //只调用一次，指令第一次绑定到元素时调用，在里面可以进行一次性的初始化设置 
-      inserted(){},//被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)
-      update(){},//所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新
-      componentUpdated(){},//指令所在组件的 VNode 及其子 VNode 全部更新后调用
-      unbind(){} // 只调用一次，指令与元素解绑时调用
-    })
-    如果你想在bind和update时触发相同行为，而且不需要其它钩子，可以这样写:
-    Vue.directive('my-directive', function () {
-      // 这里将会被 `bind` 和 `update` 调用
-    })
-    var myDirective = Vue.directive('my-directive')// 返回已注册的指令
-    */
- /**注册或获取全局过滤器。Vue.filter(id,[definition])，过滤器用在两个地方：{{}}插值和v-bind的表达式
-  * {{xxx|my-filter}}  <div :id="rawId | formatId"></div>
-    Vue.filter('my-filter', function (value) {
-      // return处理后的值
-    })
-    var myFilter = Vue.filter('my-filter')// 返回已注册的过滤器
-  */
-  // Vue.component('组件名',Vue.extend({/* */})) 注册组件，传入一个扩展过的构造器
-  // Vue.component('组件名',{/* */}) 注册组件，传入一个选项对象(会自动调用Vue.extend)
-  //let myComponent = Vue.component('组件名') 获取你注册的组件，始终返回构造器
-  // 注册组件的原理很简单，只需将组件保存在某个地方即可，Vue.options中添加了components属性，用于存放组件
-  function initAssetRegisters(Vue) {// 注册 Vue.component和Vue.directive和Vue.filter
-    ASSET_TYPES.forEach(function (type) { //遍历['component','directive','filter']
+  // 注册Vue.component和Vue.directive和Vue.filter，主要谈谈注册组件，原理是将组件保存在Vue.options的components属性即可
+  function initAssetRegisters(Vue) {
+    ASSET_TYPES.forEach(function (type) { // ['component','directive','filter']
+    // 如果Vue.xxx的第二个参数没传，函数功能是读取组件并返回，使用第一个参数id从this.options.components中读取组件并返回。如果两个参数都传了，函数功能是注册组件
       Vue[type] = function (id, definition) {
-        if (!definition) { // 如果definition没传，使用id从this.options.components中读取组件并返回
-          return this.options[type + 's'][id] // 即只传一个参数，代表函数是为了读取组件
-        } else { // 两个参数都传了，说明是注册组件的操作
+        if (!definition) {
+          return this.options[type + 's'][id]
+        } else {
           if (type === 'component') {
-            validateComponentName(id) // 对传入的组件名进行校验
+            validateComponentName(id)
           }
-          if (type === 'component' && isPlainObject(definition)) { // definition支持两种参数：选项对象和构造器，我们知道组件是一个构造函数，是调用Vue.extend生成的子类，所以如果是对象类型，调用Vue.extend将它变为Vue的子类，即将参数definition统一处理为构造器
+          if (type === 'component' && isPlainObject(definition)) {
             definition.name = definition.name || id;
             definition = this.options._base.extend(definition);
           }
-          if (type === 'directive' && typeof definition === 'function') { // definition传的是函数
-            definition = { bind: definition, update: definition } //则默认监听bind和update两个事件，所以将函数分别赋给对象中的bind和update，并且这个对象会覆盖definition。如果definition不是函数，说明是用户自定义的指令对象，不需任何操作，直接将指令对象保存在this.options.directive对象中
+          // 如果是注册组件，要对传入的组件名进行校验，第二个参数definition支持两种：选项对象和构造函数，组件就是一个构造函数，是通过调用Vue.extend生成的子类，所以如果传的是对象，调用Vue.extend将它变成Vue的子类，因此传入的definition统一处理为构造函数。Vue.component实际上是Vue.extend的封装
+          if (type === 'directive' && typeof definition === 'function') {
+            definition = { bind: definition, update: definition }
           }
-          this.options[type + 's'][id] = definition// 将自定义指令对象/过滤器函数/组件构造器和它对应的组件名存到对象中
+          // 如果是注册指令，且传入的definition是函数，则definition改为一个对象，它的bind和update属性值为该函数，即作为这两个事件的处理回调。如果definition不是函数，说明是用户定义的指令对象，直接将它保存在this.options.directive对象中，key为id
+          this.options[type + 's'][id] = definition
           return definition // 返回 自定义指令对象 / 过滤器函数 / 组件的构造函数
         }
-      } // 所以注册指令 过滤器 组件 其实就是往Vue.options中对应的属性存值
+      } // 所以注册指令、过滤器、组件，其实就是往Vue.options中对应的属性存值，将自定义指令对象、过滤器函数、组件构造器和它们对应的指令名、过滤器名、组件名以键值对存到对象中
     })
   }
 
@@ -3823,38 +3805,39 @@
       }
     }
   };
-
-  function initGlobalAPI (Vue) { // 在Vue上添加一些全局的API
-    // 给Vue定义只读属性config，它是全局配置对象，可以在启动应用之前修改里面的属性
+  // 在Vue上添加一些全局的API
+  function initGlobalAPI (Vue) {
+    // 给Vue定义只读属性config，读取Vue.config会触发config属性的get方法，返回全局配置对象config，可以在启动应用之前修改里面的属性
     Object.defineProperty(Vue, 'config', {
-      get: () => config, // 读取Vue.config会触发config属性的get，get返回config全局对象
+      get: () => config,
       set() { warn('不允许直接设置Vue.config值，只能修改它里面的单个属性') }
     });
     Vue.set = set;
     Vue.delete = del;
     Vue.nextTick = nextTick;
-    Vue.observable = (obj) => {// 把一个对象转成响应式对象，并且会在发生改变时触发相应的更新。也可以作为最小化的跨组件状态存储器，用于简单的场景：
-      observe(obj); //observe是Vue内部用来观测data对象和它的嵌套子对象的
-      return obj // 返回的对象可以直接用于渲染函数和计算属性内
+    // Vue.observable方法把一个对象响应式化，调用observe来观测这个对象和它嵌套的子对象，在发生改变时会触发相应的更新，被观测的对象可以直接用于渲染函数和计算属性内。比如let state = Vue.observable({count:0})，state.count就是响应式属性，它有自己的get和set，当属性被读取时触发get，收集依赖，当属性值被修改时触发set，触发依赖
+    Vue.observable = (obj) => {
+      observe(obj)
+      return obj
     };
-    // const state = Vue.observable({count:0}) //state.count就是响应式属性了，它有自己的get和set，当属性被读取时触发get，收集依赖，当属性值被修改时触发set，触发依赖
     // const Demo = {
-    //   render(h) { // 响应式属性state.count直接用在渲染函数中
+    //   render(h) {  // 响应式属性state.count直接用在渲染函数中
     //     return h('button', {
     //       on: { click: () => { state.count++ }}
     //     }, `count is: ${state.count}`
     //   }
     // }
-    Vue.options = Object.create(null) // Vue.options初始值为一个空对象
-    ASSET_TYPES.forEach(type => { // 给Vue.options添加components等属性
-      Vue.options[type + 's'] = Object.create(null) // 初始值为空对象
+    Vue.options = Object.create(null)
+    ASSET_TYPES.forEach(type => {
+      Vue.options[type + 's'] = Object.create(null) 
     })
+    // Vue.options初始化为一个空对象，往Vue.options添加components,directives,filters等属性，值为空对象，给Vue.options添加_base属性，值为Vue构造函数，再将builtInComponents中的KeepAlive属性拷贝到Vue.options.components对象中
     Vue.options._base = Vue;
-    extend(Vue.options.components, builtInComponents); // 将后者对象的属性拷贝到前者
-    initUse(Vue); // 注册Vue.use方法
+    extend(Vue.options.components, builtInComponents)
+    initUse(Vue); // 添加Vue.use方法
     initMixin$1(Vue); // 添加Vue.mixin方法
-    initExtend(Vue); //定义Vue.extend方法
-    initAssetRegisters(Vue); //定义全局api:Vue.component和Vue.directive和Vue.filter
+    initExtend(Vue); //添加Vue.extend方法
+    initAssetRegisters(Vue); //添加全局api:Vue.component和Vue.directive和Vue.filter
   }
   initGlobalAPI(Vue);
   Object.defineProperty(Vue.prototype, '$isServer', {
@@ -3884,7 +3867,6 @@
     return isFalsyAttrValue(value) || value === 'false'
       ? 'false'// allow arbitrary string value for contenteditable
       : key === 'contenteditable' && isValidContentEditableValue(value) ? value : 'true'
-    
   };
 
   var isBooleanAttr = makeMap('allowfullscreen,async,autofocus,autoplay,checked,compact,controls,declare,default,defaultchecked,defaultmuted,defaultselected,defer,disabled,enabled,formnovalidate,hidden,indeterminate,inert,ismap,itemscope,loop,multiple,muted,nohref,noresize,noshade,novalidate,nowrap,open,pauseonexit,readonly,required,reversed,scoped,seamless,selected,sortable,translate,truespeed,typemustmatch,visible');
@@ -7225,20 +7207,20 @@
     }
     //当遇到二元标签的结束标签或一元标签时调用它，“闭合”标签，传入标签对应的ast对象
     function closeElement (element) {
-      trimEndingWhitespace(element) // 你要闭合一个标签，那么它的末尾子节点有可能是空文本节点，要把它从元素描述对象的children数组中弹出
-      if (!inVPre && !element.processed) {//你要闭合的标签不处于v-pre之中，即不会被跳过编译，且没被解析过
-        element = processElement(element, options) //处理元素描述对象上的一些属性
-      }
-      if (!stack.length && element !== root) { //我们知道每遇到一个2元标签的开始标签就会将它的描述对象推入stack中，每遇到一个结束标签时都会将它的描述对象从stack中弹出。只有一个根元素的情况下，如果当前解析的元素是根元素，按理stack一定是空的，如果当前解析的元素不是根元素，按理stack一定有元素。如果当前解析的不是根元素，但stack为空，则说明模板中有不止一个根元素，现在解析的没有被当做root
-        // 所以满足上面条件的话，说明当前模板不止一个根元素，事实上，满足真正的根元素用了v-if，当前根元素用了v-else-if/v-else，这样就能存在多个根元素但最终只会渲染第一个根元素，如果不满足，则会报警。
-        if (root.if && (element.elseif || element.else)) {//root始终指向第一个根元素的描述对象
-          checkRootConstraints(element); //检查当前元素是否符合作为根元素的要求
-          //使用了v-else-if/v-else的元素的描述对象会被添加到使用了v-if的元素的描述对象的ifConnditions数组中，而且使用了v-if的元素也会将自身的描述对象，添加到它自己的fConditions数组中
+      trimEndingWhitespace(element)
+      //你要闭合一个标签，它的末尾子节点有可能是空文本节点，要把它从元素描述对象的children数组中弹出
+      //你要闭合的标签没被解析过，且不在v-pre之中，不会被跳过编译，先处理元素ast对象上的一些属性
+      if (!inVPre && !element.processed) element = processElement(element, options)
+      // 每遇到一个2元标签的开始标签就会将它的ast对象推入stack，每遇到一个结束标签都会将它的ast对象从stack中弹出。如果只有一个根元素，且当前解析的就是根元素，stack一定是空的，如果当前解析的不是根元素，stack一定有元素，如果stack为空，当前解析的不是根元素，说明模板中有不止一个根元素，被当做root的元素已经解析过了。如果满足第一个根元素用了v-if，其余根元素用了v-else-if/v-else，这样就能保证多个根元素存在但最终只渲染其中一个根元素，如果不满足，则会报警提示
+      if (!stack.length && element !== root) {
+        // root始终指向第一个根元素的描述对象，如果它使用了v-if，且当前解析的根元素使用了v-else-if/v-else，检查当前元素是否符合根元素的要求，将当前元素ast对象添加到使用了v-if的元素ast对象的ifConnditions数组中，而且使用了v-if的元素也会将自身的描述对象，添加到它自己的fConditions数组中
+        if (root.if && (element.elseif || element.else)) {
+          checkRootConstraints(element)
           addIfCondition(root, {
             exp: element.elseif,
             block: element
           })
-        } else { //根元素没有用v-if，或当期元素没用v-else-if/v-else，报错
+        } else {
           warnOnce("组件模版必须包含一个根节点。你可以定义多个根元素，但必须保证最终只渲染其中一个", { start: element.start })
         }
       }
@@ -7440,7 +7422,7 @@
     if (getAndRemoveAttr(el, 'v-pre') != null) el.pre = true
   }
 
-  // 元素处于v-pre环境下，调用processRawAttrs将该元素所有属性全部作为原生的属性处理，首先获取el对象的attrsList数组，如果元素没有任何属性，且没有使用v-pre，但它的父级用了v-pre指令，则给el对象上添加plain属性，值为true。
+  // 元素处于v-pre环境下，调用processRawAttrs将该元素所有属性作为原生的属性处理，首先获取el对象的attrsList数组，如果元素没有任何属性，且没有使用v-pre，但它的父级用了v-pre指令，则给el对象上添加plain属性，值为true。
   function processRawAttrs (el) {
     var list = el.attrsList; 
     var len = list.length;
@@ -7510,43 +7492,41 @@
     el.ref = ref; //为元素的描述对象添加ref属性，属性值为解析后生成的表达式字符串
     el.refInFor = checkInFor(el); //添加refInFor属性，真假代表着当前元素的ref属性是否在v-for之内
   }
-  // 父元素使用了v-for也算处于v-for之内
-  function processFor (el) { // 解析v-for指令
+
+  // 处理v-for指令，首先获取v-for的属性值，存在则调用parseFor函数解析v-for的属性值，如果解析结果res存在({for:'list', alias:'item', iterator1:'key', iterator2:'index'})，将res对象中的属性拷贝到当前元素ast对象中，如果res不存在，即解析v-for属性值失败，报警提示
+  function processFor (el) {
     var exp
-    if (exp = getAndRemoveAttr(el, 'v-for')) { //获取v-for的属性值，存在则进入if
-      var res = parseFor(exp) // 调用parseFor函数解析v-for的属性值
-      if (res) { // 解析结果res存在，将res对象中的属性拷贝到当前元素的描述对象中
+    if (exp = getAndRemoveAttr(el, 'v-for')) {
+      var res = parseFor(exp)
+      if (res) {
         extend(el, res)
-      } else { // 如果res不存在，即解析v-for属性值失败，报警提示
+      } else {
         warn$2(`Invalid v-for expression: ${exp}`, el.rawAttrsMap['v-for']);
       }
     }
   }
-  // parseFor是用来解析v-for的值，是字符串，返回一个包含解析结果的对象
-  function parseFor (exp) { // 拿'item in list'作为例子
-    var inMatch = exp.match(forAliasRE); // ['item in list','item','list']
-    if (!inMatch) return //匹配失败则函数直接返回
+  // 解析v-for的值，返回一个包含解析结果的对象，拿'(item, index) in list'作为例子，匹配成功则inMatch为['(item, index) in list','(item, index)','list'...]。匹配失败则直接返回。res为返回的解析结果，在res上添加for属性，值为'list'。变量alias代表别名，值为'item, index'，iteratorMatch为[',index','index'...]，给res添加alias属性，值为'item'。继续在res上添加iterator1属性，值是iteratorMatch数组第二个元素，为'index'。如果alias为'item, key, index'，则iteratorMatch[2]存在，为"index"，如果alias为'item'，iteratorMatch为null，自然没有iterator1和iterator2
+  function parseFor(exp) {
+    var inMatch = exp.match(forAliasRE)
+    if (!inMatch) return
     var res = {};
-    res.for = inMatch[2].trim();// 在res对象上添加for属性,值为遍历的对象'list'
-    var alias = inMatch[1].trim().replace(stripParensRE, ''); // 有可能是'item'也有可能'item, index'也有可能'item, key, index'，alias的意思是"别名"
-    var iteratorMatch = alias.match(forIteratorRE);// null [', index', 'index'] [', key, index', 'key','index']
-    if (iteratorMatch) { //如果alias值为'item, index'，则iteratorMatch会是有两个元素的数组
-      res.alias = alias.replace(forIteratorRE, '').trim(); //如果alias的值为'item, index'，则替换后的结果res.alias为'item'
-      res.iterator1 = iteratorMatch[1].trim(); //在res上定义iterator1属性，值是iteratorMatch数组第二个元素。假设alias为'item, index'，则res.iterator1为'index'
-      // 由于alias值为'item, index'，对应的iteratorMatch数组只有两个元素，所以iteratorMatch[2]为undefined，if不执行
-      if (iteratorMatch[2]) {//但如果alias为 'item, key, index'，则iteratorMatch[2]会是'index'
-        res.iterator2 = iteratorMatch[2].trim();// 在res上定义了iterator2属性，值是iteratorMatch[2]
+    res.for = inMatch[2].trim()
+    var alias = inMatch[1].trim().replace(stripParensRE, '')
+    var iteratorMatch = alias.match(forIteratorRE)
+    if (iteratorMatch) {
+      res.alias = alias.replace(forIteratorRE, '').trim()
+      res.iterator1 = iteratorMatch[1].trim()
+      if (iteratorMatch[2]) {
+        res.iterator2 = iteratorMatch[2].trim()
       }
-    } else {//如果alias值为'item'时，则iteratorMatch值会是null，在res添加alias属性，值是alias的值'item'
+    } else {
       res.alias = alias;
-    }
-    // 如果是 "(item, key, index) in list" 会被解析成下面这个对象
+    } // 如果是 "(item, key, index) in list" 会被解析成下面这个对象
     return res // {for:'list', alias:'item', iterator1:'key', iterator2:'index'}
   }
-
+  // 处理v-if指令的值，先获取它，exp，如果存在，则给添加if属性，值为exp，然后把自身元素ast对象，添加到自己的ifConditions数组中，如果exp不存在，则会看v-else，如果使用了v-else，给el添加else属性，值为true。再判断v-else-if如果有值，给给el添加elseif属性，值为v-else-if的值。可见，对于v-else/v-else-if的标签，processIf只是给el添加了else/elseif属性，没有做别的。但在闭合标签执行processIfConditions时，如果一个元素ast对象有else/elseif属性时，则它不会作为AST对象的一个节点，而是会被添加到相应的使用v-if的元素ast对象的ifConditions数组中
   function processIf(el) {
-    var exp = getAndRemoveAttr(el, 'v-if') // 获取v-if指令的值 exp
-    // 如果exp存在，给el添加if属性，值为exp，然后把它自身的元素ast对象el，添加到el的ifConditions数组中。如果exp不存在，则会判断v-else，如果v-else的属性值存在，给el添加else属性，值为true。再判断v-else-if如果它的属性值存在，给el添加elseif属性，值为v-else-if的属性值。可见，对于使用v-else/v-else-if的标签，processIf只是给el添加了else/elseif属性，没有做别的。但在闭合标签时调用processIfConditions时，如果一个元素ast对象有else/elseif属性时，则它不会作为AST对象的一个节点，而是会被添加到相应的使用v-if的元素ast对象的ifConditions数组中
+    var exp = getAndRemoveAttr(el, 'v-if')
     if (exp) {
       el.if = exp
       addIfCondition(el, {
@@ -7597,12 +7577,11 @@
     if (!el.ifConditions) el.ifConditions = []
     el.ifConditions.push(condition) 
   }
-
+  // 处理v-once指令，如果使用了v-once，在el上添加once属性，值为true
   function processOnce (el) {
-    var once$$1 = getAndRemoveAttr(el, 'v-once');//获取v-once的属性值
-    if (once$$1 != null) el.once = true;//属性值存在，在el上添加once属性, 值为true
+    var once$$1 = getAndRemoveAttr(el, 'v-once')
+    if (once$$1 != null) el.once = true;
   }
-
   function processSlotContent (el) {
     var slotScope;
     if (el.tag === 'template') { // 如果当前解析的元素是<template> 获取标签 scope 属性的值

@@ -93,12 +93,3 @@
 
 
 // 在 processRawAttrs 函数内部首先定义了 l 常量，，接着使用一个 if 语句判断 l 是否为真，如果，此时会执行 if 语句块内的代码，在 if 语句块内首先定义了 attrs 常量，它与 el.attrs 属性有着相同的引用，初始值是长度为 l 的数组。接着使用 for 循环，并：
-
-var exp = '(item, index) in list'
-var forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/ //匹配v-for的属性值
-var inMatch = exp.match(forAliasRE);
-var forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
-var alias = 'item'
-    var iteratorMatch = alias.match(forIteratorRE);// null [', index', 'index'] [', key, index', 'key','index']
-    // var alias = inMatch[1].trim().replace(stripParensRE, '') //alias:"别名"。有可能是'item'、'item, index'、'item, key, index'
-console.log(iteratorMatch);

@@ -437,29 +437,6 @@
     cloned.isCloned = true;
     return cloned
   }
-  // Vue一般渲染有两条路径：1、组件实例首次创建 生成DOM。2、组件数据更新刷新DOM
-  // 生命周期钩子mount和update分别代表了两条渲染路径。组件实例的首次创建时，没有已暂存的旧vnode，要经历第一轮VNode的生成。这是从$mount函数开始的：$mount=>mountComponent=>updateComponent=>_render=>_update=>createPatchFunction(patch)=>createElm=>insert=>removeVnodes
-  // 大致说一下每个流程中关于节点的处理：
-  // mountComponent：接收了挂载的真实DOM节点el，赋值给vm.$el
-  // updateComponent 执行vm._update(vm._render(), hydrating) 生成新的真实DOM节点完成重渲染
-  // _render 生成新vnode节点树，它内部是调用实例的createElement方法创建虚拟节点
-  // _update 接收新的虚拟节点，会根据是否已有旧vnode节点来进行不同的操作，对首次创建组件来说，旧VNode不存在，但由于挂载的真实DOM节点一定存在，于是执行patch，传入挂载的真实DOM节点和新生成的vnode节点。
-  // createPatchFunction是patch函数调用的实际函数，执行时会将传入的真实DOM节点转换成虚拟节点，然后执行createElm
-  // createElm 会根据新的vnode节点生成真实DOM节点，内部同样调用createElement函数来创建节点
-  // insert 将生成的真实DOM插入到DOM树中
-  // removeVnodes 将之前转换的真实DOM节点从DOM树中移除
-  
-  // 组件数据更新而刷新DOM，数据变化会通知watcher调用update，update一般做法是把待渲染的watcher推入异步任务队列中，避免一次集中处理开销过高，所以在mount完后，生命周期运行期间都是走update路径。nextTick(flushQueue)将flushQueue推入callbacks数组，并将flushCallbacks注册为微任务、
-  // 整个流程大致：flushSchedulerQueue => watcher.run => watcher.get => updateComponent => _render => _update => createPatchFunction(patch) => patchVnode => updateChildren
-  // flushSchedulerQueue 执行队列中每一个watcher的run方法
-  // run 执行watcher的get方法，进行求值获取最新的值，并执行回调cb
-  // get 执行取值器函数getter，此时getter为updateComponent
-  // updateComponent 执行vm._update(vm._render(), hydrating)
-  // _render 生成新vnode节点树，它内部是调用实例的createElement方法创建虚拟节点
-  // _update 接收新的虚拟节点，执行patch，传入新旧的vnode节点，如果存在旧vnode就执行patchVnode
-  // patchVnode 实际更新节点，在这个函数的执行中，会得到最终的真实DOM 
-
-  // 生命周期中的渲染主要是这两条路径，调用的入口不同，但中间有一部分逻辑是共用的，再根据判断来执行不同的操作。
 
   const arrayProto = Array.prototype;
   const arrayMethods = Object.create(arrayProto); //创建一个空对象，原型指向Array原型
@@ -1015,16 +992,18 @@
     }
     return options
   }
-  // 组件在模板中使用，在组件注册时可以有三种写法：和使用时保持一致/驼峰命名/首字母大写的驼峰命名。局部注册的组件会保存在vm.$options.components中，全局注册的组件保存在Vue.options.components中，在vm.$options.components的原型链上。resolveAsset函数查询组件的注册信息，会先查注册的局部变量，如果找不到再沿着原型链查找，这也是局部组件只拿在自身使用，全局组件能在全局使用的原因
-  function resolveAsset(options, type, id, warnMissing) { //filters components directives
+
+  // 拿type传'components'举例，resolveAsset函数查询组件的注册信息，会先查注册的局部变量，如果找不到再沿着原型链查找，这也是局部组件只能在自身使用，全局组件能在全局使用的原因。组件在模板中使用，注册组件时可以有3种写法：和使用时保持一致/驼峰命名/首字母大写的驼峰命名。局部注册的组件构造器会存到vm.$options.components中，全局注册的组件保存在Vue.options.components中，在vm.$options.components的原型链上。
+  function resolveAsset(options, type, id, warnMissing) { //type: filters components directives
     if (typeof id !== 'string') return
-    var assets = options[type]; //获取配置对象中的components对象
-    if (hasOwn(assets, id)) return assets[id] //保持了原样
-    var camelizedId = camelize(id); //写成驼峰
+    // 组件名不为字符串，直接返回，获取当前options中的components对象，如果里面存在自有属性id原样/驼峰化的id/首字母大写的驼峰化的id，说明这是注册的局部组件，直接返回对应的组件构造器
+    var assets = options[type]
+    if (hasOwn(assets, id)) return assets[id]
+    var camelizedId = camelize(id)
     if (hasOwn(assets, camelizedId)) return assets[camelizedId]
-    var PascalCaseId = capitalize(camelizedId); //首字母大写的驼峰
+    var PascalCaseId = capitalize(camelizedId)
     if (hasOwn(assets, PascalCaseId)) return assets[PascalCaseId]
-    // 如果是vm.$options.components中能找到对应的注册信息，则说明注册的局部组件，如果上面都不成立，再判断下面res是否存在，如果存在说明沿着原型链找到全局注册的组件信息，返回res
+    // 如果上面都不成立，说明局部没有注册该组件，如果res存在，说明沿着原型链可以找到Vue.options.components对象中全局注册的组件构造器，返回res
     var res = assets[id] || assets[camelizedId] || assets[PascalCaseId];
     if (warnMissing && !res) warn('Failed to resolve ' + type.slice(0, -1) + ': ' + id, options)
     return res
@@ -2128,7 +2107,6 @@
         child.$mount(hydrating ? vnode.elm : undefined, hydrating)//组件实例调用$mount方法进行实例的挂载，非ssr时第一个参数为undefined而不是实际元素，意味着将执行vm._render和vm._update(调用vm.__patch__创建组件的DOM树)，但由于没有提供实际元素el，并不会将DOM树插入到父元素，插入到父元素的操作将在初始化子组件实例时完成，即initComponent和insert函数
       }
     },
-
     prepatch (oldVnode, vnode) {
       var options = vnode.componentOptions//获取vnode对应的组件的配置对象
       var child = vnode.componentInstance = oldVnode.componentInstance;
@@ -2140,7 +2118,6 @@
         options.children // new children
       );
     },
-
     insert (vnode) {
       var context = vnode.context;
       var componentInstance = vnode.componentInstance;
@@ -2156,7 +2133,6 @@
         }
       }
     },
-
     destroy (vnode) {
       var componentInstance = vnode.componentInstance;
       if (!componentInstance._isDestroyed) {
@@ -2171,14 +2147,13 @@
 
   var hooksToMerge = Object.keys(componentVNodeHooks);
 
-  //组件的vnode一般称之为组件占位vnode，因为该vnode在最终创建的DOM树中并不会具體對應一个DOM节点，即不会出现在DOM树里，只出现在vnode树里，内置组件和普通组件在编译过程是没有区别的，在模板编译成渲染函数的处理方式是一样的，有了渲染函数，就开始了从子组件到父组件生成组件vnode的过程，_c('xxx'...)的处理，会执行createElement生成组件vnode，不管是内置组件还是普通组件都会调用createComponent函数去创建子组件vnode
-  function createComponent (Ctor, data, context, children, tag) {
-    if (isUndef(Ctor)) return
-    var baseCtor = context.$options._base;
-    if (isObject(Ctor)) {
-      Ctor = baseCtor.extend(Ctor);
-    }
-    if (typeof Ctor !== 'function') {
+  // 创建子组件vnode，或叫子组件占位vnode，在最终创建的DOM树中，它不会对应一个DOM节点，即不会出现在DOM树里，只出现在vnode树里。内置组件和普通组件在编译成渲染函数时处理方式是一样的，有了渲染函数，就开始从子组件到父组件生成组件vnode的过程：_c('xxx'...)的处理，执行createElement中调用该函数去创建子组件vnode
+  function createComponent(Ctor, data, context, children, tag) {
+    if (isUndef(Ctor)) return // Ctor没有定义，直接返回
+    var baseCtor = context.$options._base; // 基础构造器Vue
+    // 局部注册组件时，会通过在父组件的options.components中添加子组件的options，这和全局注册后在Vue.options.components添加子组件构造器很类似，区别在于：1.局部注册添加的配置对象是在某个组件之下，全局注册添加的子组件构造器是在根实例下。2.局部注册添加的是一个子组件的配置对象，全局注册添加的是一个子类构造器。所以局部注册缺少了一步构建子类构造器的过程，这一步在createComponent中进行，根据Ctor是对象还是函数来区分局部和全局组件，如果是对象，则该组件是局部注册的组件，会调用Vue.extend方法去创建一个子类构造器
+    if (isObject(Ctor)) Ctor = baseCtor.extend(Ctor) // 将配置对象转成一个子类构造器
+    if (typeof Ctor !== 'function') { // 如果Ctor还不是一个函数，则报警
       warn(("Invalid Component definition: " + (String(Ctor))), context);
       return
     }
@@ -2191,8 +2166,8 @@
       }
     }
     data = data || {};
-    resolveConstructorOptions(Ctor);
-    if (isDef(data.model)) {
+    resolveConstructorOptions(Ctor) //组件构造器的options更新为当前构造器的options和它父级构造器的options的合并结果
+    if (isDef(data.model)) { // 如果组件标签上使用了v-model
       transformModel(Ctor.options, data);
     }
     var propsData = extractPropsFromVNodeData(data, Ctor, tag);
@@ -2207,14 +2182,10 @@
       data = {} // data中的其他属性被剔除，在抽象组件中它们没有意义
       if (slot) data.slot = slot
     }
-    installComponentHooks(data)// 会在vnode.data.hook上安裝一系列組件管理鉤子函數
+    installComponentHooks(data)// 在vnode.data.hook上挂载一系列组件钩子函數
     var name = Ctor.options.name || tag;
-    var vnode = new VNode(
-      `vue-component-${Ctor.cid}${name ? `-${name}` : ''}`,
-      data, undefined, undefined, undefined, context,
-      { Ctor, propsData, listeners, tag, children },
-      asyncFactory
-    )
+    // 创建子组件vnode，名称以vue-component-开头
+    var vnode = new VNode(`vue-component-${Ctor.cid}${name ? `-${name}` : ''}`, data, undefined, undefined, undefined, context, { Ctor, propsData, listeners, tag, children }, asyncFactory)
     return vnode
   }
 
@@ -2233,24 +2204,26 @@
     return new vnode.componentOptions.Ctor(options)//vnode.componentOptions.Ctor是在为组件创建vnode时传入的组件构造函数，该构造函数是基于Vue继承而来，混合了组件自身的选项(Ctor.options)，此外，创建实例时，也会传入options，但这个options跟跟创建根组件传入的options有些许区别
   }
 
-  // 給組件的vnode.data.hook上安裝一系列組件管理的鉤子函數
+  // 給組件的vnode.data.hook上挂载一系列組件管理的鉤子函數
   function installComponentHooks (data) {
-    var hooks = data.hook || (data.hook = {}) //創建vnode.data.hook對象
+    var hooks = data.hook || (data.hook = {})
+    //给vnode.data添加hook属性(对象)，遍历['init','prepatch','insert','destroy']，这是4个组件的钩子函数名，如果data.hook中当前钩子和将要合并的钩子不同，且现有的钩子不存在或存在但不是合并后的钩子，则如果现有的钩子存在，调用mergeHook将两个钩子合并为一个，如果不存在现有的钩子，直接将要合并的钩子toMerge存到data.hook对象中
     for (var i = 0; i < hooksToMerge.length; i++) {
-      var key = hooksToMerge[i] //4個組件的鉤子函數的函數名
-      var existing = hooks[key];
-      var toMerge = componentVNodeHooks[key];//4個組件內部的鉤子函數
-      if (existing !== toMerge && !(existing && existing._merged)) {//現有的鉤子和將要合併的鉤子不同，且現有的不存在或存在卻沒合併，則如果現有的存在，調用mergeHook將兩個鉤子合併成一個，如果不存在現有的鉤子，直接用將要合併的鉤子toMerge
+      var key = hooksToMerge[i]
+      var existing = hooks[key]
+      var toMerge = componentVNodeHooks[key]
+      if (existing !== toMerge && !(existing && existing._merged)) {
         hooks[key] = existing ? mergeHook$1(toMerge, existing) : toMerge;
       }
     }
   }
-  function mergeHook$1 (f1, f2) {//合併兩個鉤子成一個新的鉤子
+  // 合并两个钩子成一个新的钩子，新的钩子就是f1和f2依次执行，接收同样的参数，新钩子有_merged屬性
+  function mergeHook$1 (f1, f2) {
     function merged(a, b) {
-      f1(a, b); // 新的鉤子執行就是f1和f2依次執行，接收同樣的參數
+      f1(a, b);
       f2(a, b);
     }
-    merged._merged = true; //合併而成的鉤子函數有_merged屬性
+    merged._merged = true
     return merged
   }
   function transformModel (options, data) {
@@ -2261,11 +2234,7 @@
     var existing = on[event];
     var callback = data.model.callback;
     if (isDef(existing)) {
-      if (
-        Array.isArray(existing)
-          ? existing.indexOf(callback) === -1
-          : existing !== callback
-      ) {
+      if (Array.isArray(existing) ? existing.indexOf(callback) === -1 : existing !== callback) {
         on[event] = [callback].concat(existing);
       }
     } else {
@@ -2277,7 +2246,6 @@
   var ALWAYS_NORMALIZE = 2;
 
   // createElement 到底会返回什么呢？其实不是一个实际的 DOM 元素。它更准确的名字可能是 createNodeDescription，因为它所包含的信息会告诉 Vue 页面上需要渲染什么样的节点，包括及其子节点的描述信息。我们把这样的节点描述为“虚拟节点 (virtual node)”，也常简写它为“VNode”。“虚拟 DOM”是我们对由 Vue 组件树建立起来的整个 VNode 树的称呼。
-
 
   // createElement返回VNode对象，它不是实际的DOM元素，vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息，vnode又叫虚拟节点。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
   function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
@@ -2324,19 +2292,18 @@
     if (typeof tag === 'string') { // 如果标签名是字符串类型
       var Ctor;
       ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag);
-      if (config.isReservedTag(tag)) { //如果tag是普通的html标签
-        vnode = new VNode( // 直接创建vnode节点
+      // 如果标签是普通html标签，直接创建vnode节点
+      if (config.isReservedTag(tag)) {
+        vnode = new VNode(
           config.parsePlatformTagName(tag), data, children,
           undefined, undefined, context
         );
-      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { //
-        // 是组件，判断这个占位符组件是否已经注册过，通过context.$options.components[组件名]拿到注册后的组件选项，如果有定义则组件已经全局注册。创建子组件vnode实例
-        vnode = createComponent(Ctor, data, context, children, tag);
+      } else if ((!data || !data.pre) &&
+        isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // 是组件，调用resolveAsset根据标签名获取已注册的组件构造器，可能是局部组件，也可能是全局组件，如果有值，说明该占位符组件已经注册过，调用createComponent创建子组件vnode
+        vnode = createComponent(Ctor, data, context, children, tag)
       } else {
-        vnode = new VNode(
-          tag, data, children,
-          undefined, undefined, context
-        );
+        vnode = new VNode(tag, data, children, undefined, undefined, context);
       }
     } else { // tag不是字符串时，执行createComponent创建一个Component对象
       //直接的component配置对象或构造函数
@@ -2719,13 +2686,11 @@
 
   var activeInstance = null; // activeInstance指向当前正在渲染的实例
   var isUpdatingChildComponent = false;
-
-  function setActiveInstance(vm) { // 将传入的vm赋给activeInstance
+  // 将传入的vm赋给activeInstance，当前活跃的实例，返回一个函数，函数执行将activeInstance恢复为上一个活跃实例
+  function setActiveInstance(vm) {
     var prevActiveInstance = activeInstance;
     activeInstance = vm;
-    return () => {//返回一个函数，函数执行会将上一个活跃的实例赋给activeInstance
-      activeInstance = prevActiveInstance // 这里又用了闭包
-    }
+    return () => { activeInstance = prevActiveInstance }// 这里用了闭包
   }
 
   function initLifecycle (vm) {
@@ -2756,25 +2721,21 @@
     // _update方法把vnode渲染成真实DOM，是对vm.__patch__的封装，真正的创建/更新DOM树是由vm.__patch__方法完成。_update做了一些调用vm.__patch__前后的处理
     Vue.prototype._update = function (vnode, hydrating) {
       var vm = this
-      var prevEl = vm.$el; // 組件未掛載時，vm.$el指向掛載點元素
-      var prevVnode = vm._vnode; //vm的旧的根vnode节点
-      var restoreActiveInstance = setActiveInstance(vm);//当前vm为活跃实例
-      vm._vnode = vnode; //vm的新的根vnode节点
-      if (!prevVnode) { //如果不存在旧的根vnode节点，则要首次渲染，返回的真實DOM節點賦給vm.$el
+      // vm指向当前实例，当组件未挂载时，vm.$el指向挂载点元素，vm._vnode是实例的旧的根vnode节点，将当前vm赋给activeInstance，将传入的vnode赋给vm._vnode，更新vm的根vnode节点
+      var prevEl = vm.$el
+      var prevVnode = vm._vnode
+      var restoreActiveInstance = setActiveInstance(vm)
+      vm._vnode = vnode
+      // 如果不存在旧的根vnode节点，说明这是首次渲染，调用__patch__方法返回真实DOM节点赋给vm.$el，如果存在旧的根vnode节点，执行更新操作，返回真实DOM节点赋给vm.$el。然后把activeInstance恢复为原来那个
+      if (!prevVnode) {
         vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false/*removeOnly*/)
-      } else { //如果存在旧的根vnode节点，执行更新操作，返回的真實DOM節點賦給vm.$el
+      } else {
         vm.$el = vm.__patch__(prevVnode, vnode);
       }
-      restoreActiveInstance() //活跃实例恢复为之前的那个
-      if (prevEl) {
-        prevEl.__vue__ = null;
-      }
-      if (vm.$el) {
-        vm.$el.__vue__ = vm;
-      }
-      if (vm.$vnode && vm.$parent && vm.$vnode === vm.$parent._vnode) {
-        vm.$parent.$el = vm.$el;
-      }
+      restoreActiveInstance()
+      if (prevEl) prevEl.__vue__ = null;
+      if (vm.$el) vm.$el.__vue__ = vm;
+      if (vm.$vnode && vm.$parent && vm.$vnode === vm.$parent._vnode) vm.$parent.$el = vm.$el;
     };
     // 迫使当前实例重新渲染（包括插入插槽的子组件）
     Vue.prototype.$forceUpdate = function () {
@@ -3380,7 +3341,6 @@
           watcher.depend();
         }
         return watcher.value // 计算属性的读取，getter函数返回watcher.value
-
         // 假如模版里只使用一个计算属性，看似组件的watcher(渲染函数的watcher)监听的是计算属性，但你修改计算属性依赖的一个数据，模版会重新渲染，这是为啥？
         // 计算属性的watcher是惰性求值的，它在创建时，不会立即执行this.get()，即没有立即求值
         // 计算属性还没被首次读取时，它的watcher的dirty是true。并且因为没有求值，计算属性它依赖的所有数据也没有收集依赖。
@@ -3491,11 +3451,9 @@
       vm._isVue = true; //标识是Vue实例而不是普通的对象，避免被观测 
       if (options && options._isComponent) { //_isComponent表明是内部子组件
         initInternalComponent(vm, options) // 主要为vm.$options添加一些属性
-      } else { //当前Vue实例不是组件，调用mergeOptions方法
+      } else { //当前Vue实例不是组件，调用mergeOptions方法，将vm的构造器的options(合并了父级构造器的options)，和当前实例化时接收的options合并
         vm.$options = mergeOptions(
-          resolveConstructorOptions(vm.constructor),//解析constructor上的options属性
-          options || {},
-          vm
+          resolveConstructorOptions(vm.constructor), options || {}, vm
         )
       }
       initProxy(vm); //设置渲染函数的作用域代理，为我们提供更好的提示信息。
@@ -3503,83 +3461,80 @@
       initLifecycle(vm); // 向实例挂载属性
       initEvents(vm); // 初始化事件
       initRender(vm); // 渲染的初始化
-      callHook(vm, 'beforeCreate');// 通过vm.$options得到用户设置的生命周期函数
+      callHook(vm, 'beforeCreate')
       initInjections(vm); // 在data/props前初始化inject
       initState(vm);
       initProvide(vm); // 在data/props后初始化 provide
       callHook(vm, 'created');
-      if (vm.$options.el) { //在new Vue时传了el节点，则调用$mount开启模版编译阶段和挂载阶段
-        vm.$mount(vm.$options.el);
-      }// 如果没有传，则需要用户手动调用vm.$mount，否则不进入下一个生命周期流程
+      // 执行完所有初始化后，开始挂载实例到DOM上，实例化组件构造器时，如果传了el，调用$mount开启模版编译和挂载，如果没有传，则需要用户手动调用vm.$mount，否则不会进入下一生命周期流程
+      if (vm.$options.el) vm.$mount(vm.$options.el);
     };
   }
-
-  function initInternalComponent (vm, options) {
+  // 为创建的内部组件的options对象手动赋值，提升性能
+  function initInternalComponent(vm, options) {
+    // 创建一个以vm.constructor.options为原型的空对象
     var opts = vm.$options = Object.create(vm.constructor.options);
-    // doing this because it's faster than dynamic enumeration.
-    var parentVnode = options._parentVnode;
-    opts.parent = options.parent;
-    opts._parentVnode = parentVnode;
+    // 以下为手动赋值，它比动态枚举属性来赋值来得快
+    var parentVnode = options._parentVnode // 获取父vnode节点
+    opts.parent = options.parent; // 父DOM节点
+    opts._parentVnode = parentVnode; // 给opts对象添加_parentVnode属性
+    // 获取父vnode节点的componentOptions，给opts对象添加propsData等属性
     var vnodeComponentOptions = parentVnode.componentOptions;
     opts.propsData = vnodeComponentOptions.propsData;
     opts._parentListeners = vnodeComponentOptions.listeners;
     opts._renderChildren = vnodeComponentOptions.children;
     opts._componentTag = vnodeComponentOptions.tag;
+    // 如果options.render存在，设置opts的render和staticRenderFns属性
     if (options.render) {
       opts.render = options.render;
       opts.staticRenderFns = options.staticRenderFns;
     }
   }
 
-  // 作用是获取当前实例的构造函数的options和其所有父级的构造函数的options的合并结果。分成两种情况：Ctor是基础Vue构造器、Ctor是通过Vue.extend扩展的子类。当Ctor是基础Vue构造器时，比如new Vue产生的实例，这时的options就是Vue.options（三次extend，生成了完整的Vue.options对象），直接返回基础构造器的options，即Vue.options
-  function resolveConstructorOptions(Ctor) {
+  // 获取当前实例的构造函数的options和其所有父级的构造函数的options的合并结果
+  function resolveConstructorOptions (Ctor) {
     var options = Ctor.options;
-    if (Ctor.super) { // Ctor.super是通过Vue.extend构造子类时，为Ctor添加的super属性，指向其父类构造器
-      // Vue.extend中Sub['super']=Super Sub是Vue的子类，添加super属性，值为调用extend的对象（父类）
-      var superOptions = resolveConstructorOptions(Ctor.super);//递归调用，传入Ctor的父类，获取父类上的options。
-      var cachedSuperOptions = Ctor.superOptions; //把子类Ctor的superOptions，即调用Vue.extend时存的父类的options，赋给cachedSuperOptions
-      // 如果这两个值不全等，说明"父类"的options改动过，这时需要更新Ctor.superOptions。
-      //  var Profile = Vue. extend({
-      //     template: '<p>{{firstName}} {{lastName}} aka {{alias}}</p>'
-      //  })
-      //  Vue.mixin({ data: function () {
-      //    return {
-      //      firstName: 'Walter',
-      //      lastName: 'White',
-      //      alias: 'Heisenberg'
-      //    }
-      //  }})
-      //  new Profile().$mount('#example')
-      //  由于Vue.mixin改变了"父类"options。superOptions和cachedSuperOptions就不相等了
-      if (superOptions !== cachedSuperOptions) { // 父类的options改动过了
-        Ctor.superOptions = superOptions;
-        var modifiedOptions = resolveModifiedOptions(Ctor); //获取Ctor的options的改动情况
-        if (modifiedOptions) { //如果存在，说明Ctor的options变化了
-          extend(Ctor.extendOptions, modifiedOptions); // 将改动/新增的项拷贝到子类的extendOptions
-        }
-        options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions);
-        // 将Ctor.extendOptions和superOptions（所有父级构造器的options）合并，赋给当前子类Ctor.options
-        if (options.name) {
-          options.components[options.name] = Ctor;
-        }
-      }
-    } // 当Ctor是基础构造器时，返回基础构造器的options。
+    // 如果Ctor的父类构造器不存在，说明Ctor是Vue，返回Vue.options
+    if (!Ctor.super) return options
+    var superOptions = resolveConstructorOptions(Ctor.super)
+    var cachedSuperOptions = Ctor.superOptions
+    // 递归调用resolveConstructorOptions，传入Ctor的父类，获取父类构造器的options，赋给superOptions。获取Ctor.superOptions，即父类的options，赋给cachedSuperOptions，如果这两个值不全等，说明父类的options改动过，这时需要更新Ctor.superOptions，比如下面Vue.mixin改变了父类的options，superOptions和cachedSuperOptions就不相等了
+    //  var Profile = Vue. extend({
+    //     template: '<p>{{firstName}} {{lastName}} aka {{alias}}</p>'
+    //  })
+    //  Vue.mixin({ data: function () {
+    //    return {
+    //      firstName: 'Walter',
+    //      lastName: 'White',
+    //      alias: 'Heisenberg'
+    //    }
+    //  }})
+    //  new Profile().$mount('#example')
+    if (superOptions !== cachedSuperOptions) {
+      Ctor.superOptions = superOptions
+      // 如果Ctor的options变动了，将改动/新增的项拷贝到Ctor.extendOptions，然后将Ctor.extendOptions和superOptions(所有父级构造器的options总成)合并，赋给当前子类Ctor.options，即更新了Ctor.options。如果存在name属性，则给Ctor.options.components对象添加属性name和对应的Ctor，组件构造器
+      var modifiedOptions = resolveModifiedOptions(Ctor)
+      if (modifiedOptions) extend(Ctor.extendOptions, modifiedOptions)
+      options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions);
+      if (options.name) options.components[options.name] = Ctor;
+    }
     return options
   }
   // 总结一下：首先判断是子类吗，不是，返回Ctor.options，是子类，判断父类的options改变了吗？没改，返回Ctor.options，改了，递归调用resolveConstructorOptions获取最新的所有父类的options，再判断子类你本身改变了吗？没改，将最新的父类options和自身的extendOptions合并，并返回。如果子类本身的options改了，把改动项解析出来，扩展到自身的extendOptions，再将最新的父级options和自身的extendOptions合并，并返回
 
+  // 得出子类tor的options的变动项组成的modified对象，如果没有变动，返回undefined
   function resolveModifiedOptions(Ctor) {
     var modified;
-    var latest = Ctor.options; // 当前子类Ctor的options
-    var sealed = Ctor.sealedOptions;// Vue.extend时保存的子类Ctor的options
+    // latest是当前子类Ctor的options，sealed是Vue.extend执行时保存的子类Ctor的options，遍历latest，如果latest中存在和sealed中不一样的项，则说明它是改动/新增的项，将它添加到modified对象，遍历结束返回modified
+    var latest = Ctor.options
+    var sealed = Ctor.sealedOptions
     for (var key in latest) {
-      if (latest[key] !== sealed[key]) { //如果latest中存在和sealed不一样的项，则说明它是改动的项
-        if (!modified) // modified还没定义，那就创建一个空对象，存改动的项
-          modified = {};
-        modified[key] = latest[key]; // 将新添的项/改动的项添加到modified
+      if (latest[key] !== sealed[key]) {
+        if (!modified) modified = {};
+        modified[key] = latest[key]
       }
     }
-    return modified // 返回出modified，如果子类的options没改动，它是undefined
+    return modified
   }
 
   function Vue(options) { // 内部定义的Vue构造函数，最后会返回出来
@@ -3610,20 +3565,18 @@
       return this
     };
   }
-  // 
+  // 定义mixn函数，接收用户传入的options对象，调用mergeOptions将它和Ctor.options合并，并覆盖Ctor.options，因为创建组件实例都会用到Ctor.options，调用了Ctor.mixin后，Ctor.options更新了，会影响之后创建的每个vm实例
   function initMixin$1(Vue) { 
-    Vue.mixin = function (mixin) { // 接收用户传入的options对象，和Vue.options合并在一起，并覆盖Vue.options
-      this.options = mergeOptions(this.options, mixin) //因为创建的vm实例都会用到Vue.options属性，所以Vue.mixin调用后，Vue.options更新，会影响之后创建的每个vm实例
+    Vue.mixin = function (mixin) {
+      this.options = mergeOptions(this.options, mixin)
       return this
     }
   }
-
-  // 定义Vue.extend方法，用来创建一个Vue的子类。
+  // 定义Vue.extend方法，用来创建一个Vue的子类，是每个实例构造器都有的方法
   function initExtend(Vue) {
-    // Vue构造函数的cid为0，每个实例的构造函数(包括Vue)都有唯一的cid
-    Vue.cid = 0
-    var cid = 1
-    // Vue.extend是每个实例构造器都有的方法，它的this指向调用extend的构造器，定义为Super(可以理解为父类)，Vue.extend接收一个选项对象extendOptions
+    Vue.cid = 0 // Vue构造函数的cid为0
+    var cid = 1 // 每个实例的构造器都有一个唯一的cid
+    // Vue.extend的this指向调用extend的构造器，定义为Super(可以理解为父类)，Vue.extend接收一个选项对象extendOptions，创建一个子类并继承父类构造器上的一些属性、原型方法、静态方法等，最后返回子类，它拥有和Vue父类一样的能力，并在实例化时会执行继承来的_init方法完成子组件的初始化
     Vue.extend = function (extendOptions = {}) {
       var Super = this
       var SuperId = Super.cid // 父类的cid
@@ -3641,6 +3594,7 @@
       Sub.prototype = Object.create(Super.prototype)
       Sub.prototype.constructor = Sub
       // 给子类Sub添加options属性，值是合并了父类options和接收的扩展选项对象的对象。给子类Sub添加super属性，值为父类
+      Sub.cid = cid++;
       Sub.options = mergeOptions(Super.options, extendOptions)
       Sub['super'] = Super
       // 获取子类Sub的options的props，如果有props对象，遍历它，交给Sub的原型的_props属性代理，这样子类Sub的实例.prop名 就能访问prop的值
@@ -3675,10 +3629,10 @@
     }
   }
 
-  // 注册Vue.component和Vue.directive和Vue.filter，主要谈谈注册组件，原理是将组件保存在Vue.options的components属性即可
+  // 注册Vue.component和Vue.directive和Vue.filter，注册全局组件，就是在Vue实例化前，创建一个基于Vue的子类构造器，并将组件构造器保存在Vue.options.components对象中
   function initAssetRegisters(Vue) {
     ASSET_TYPES.forEach(function (type) { // ['component','directive','filter']
-    // 如果Vue.xxx的第二个参数没传，函数功能是读取组件并返回，使用第一个参数id从this.options.components中读取组件并返回。如果两个参数都传了，函数功能是注册组件
+    // 如果Vue.components的第二个参数没传，根据传入的id从this.options.components中直接返回注册过的组件构造器。如果两个参数都传了，意味着对该组件进行注册，第二个参数definition支持两种：选项对象和构造函数
       Vue[type] = function (id, definition) {
         if (!definition) {
           return this.options[type + 's'][id]
@@ -3690,7 +3644,7 @@
             definition.name = definition.name || id;
             definition = this.options._base.extend(definition);
           }
-          // 如果是注册组件，要对传入的组件名进行校验，第二个参数definition支持两种：选项对象和构造函数，组件就是一个构造函数，是通过调用Vue.extend生成的子类，所以如果传的是对象，调用Vue.extend将它变成Vue的子类，因此传入的definition统一处理为构造函数。Vue.component实际上是Vue.extend的封装
+          // 如果是注册组件，先对组件名进行合法性校验，默认会把传入的id作为组件名，但如果definition存在name属性，则name属性值会作为组件名。如果definition传的是对象，调用Vue.extend创建Vue的子类，传入的definition都处理为构造函数
           if (type === 'directive' && typeof definition === 'function') {
             definition = { bind: definition, update: definition }
           }
@@ -3984,16 +3938,18 @@
   }
 
   var isTextInputType = makeMap('text,number,password,search,email,tel,url');
-
+  // 获取document的子元素中和el字符串匹配的第一个元素，如果获取不到，则创建并返回一个div元素。如果el不是字符串，则默认为一个DOM元素，直接返回el
   function query (el) {
-    if (typeof el === 'string') { // 如果el是字符串，则获取并返回对应的元素
+    if (typeof el === 'string') {
       var selected = document.querySelector(el)
-      if (!selected) { // 获取不到对应的元素
+      if (!selected) {
         warn('找不到元素' + el);
-        return document.createElement('div') // 创建并返回一个div元素
+        return document.createElement('div')
       }
-      return selected // 返回document的子元素中和el匹配的第一个元素
-    } else { return el }// 如果不是字符串，则默认是一个DOM对象，直接返回el
+      return selected 
+    } else {
+      return el
+    }
   }
 
   function createElement$1 (tagName, vnode) {
@@ -4663,7 +4619,8 @@
         return node.nodeType === (vnode.isComment ? 8 : 3)
       }
     }
-    // _update执行，如果是首次渲染，執行vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false)，更新真實節點時，執行vm.$el = vm.__patch__(prevVnode, vnode)，vm.__patch__其实就是patch函数
+
+    // 在浏览器环境，__patch__方法就是patch，patch内部会通过createElm去创建真实的DOM元素，期间遇到子vnode会递归调用createElm，递归调用过程中，判断该节点类型是否为组件占位vnode，通过createComponent方法判断，该函数和渲染vnode阶段的createComponent不同，它会调用子组件的init钩子函数进行初始化，并完成组件的DOM插入
     return function patch(oldVnode, vnode, hydrating, removeOnly) {
       if (isUndef(vnode)) {//如果新vnode節點沒有定義，但舊的vnode節點有定義，則銷毀舊vnode節點並返回
         if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
@@ -4910,7 +4867,6 @@
       if (isFalsyAttrValue(value)) {
         el.removeAttribute(key);
       } else {
-
         value = key === 'allowfullscreen' && el.tagName === 'EMBED' ? 'true' : key;
         el.setAttribute(key, value);
       }
@@ -6654,45 +6610,43 @@
   // 如果运行在浏览器，Vue的原型方法__patch__是patch
   Vue.prototype.__patch__ = inBrowser ? patch : noop;
 
-  // 完整版的Vue的和运行时版Vue的$mount，最后都执行mountComponent，作用是将组件实例挂载到DOM元素上，其实就是将模版渲染到DOM节点中，并且以后当数据变化时，会重渲染到指定的DOM元素。
+  // 执行$mount最后都执行mountComponent，作用是将组件实例挂载到DOM元素上，其实就是将模版渲染到DOM节点中，并且以后当数据变化时，会重渲染到指定的DOM元素。
   function mountComponent (vm, el, hydrating) {
-    vm.$el = el; // 往组件实例vm上添加$el属性，值为挂载元素el。vm.$el的值是组件模板的根元素，这里只是暂时的赋值，是为了给patch方法使用的，实际上vm.$el会被patch方法的返回值重写
-    if (!vm.$options.render) { // 如果不存在渲染函数，则设置一个创建空节点的渲染函数
+    vm.$el = el
+    // 给组件实例vm添加$el属性，它存组件模板的根元素，现在赋值为el只是暂时的，是为了给patch方法使用的，实际上vm.$el会被patch方法的返回值重写
+    // 如果不存在渲染函数，则将render选项设为创建空vnode节点的函数，并报警
+    if (!vm.$options.render) {
       vm.$options.render = createEmptyVNode
       if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') || vm.$options.el || el) {
-        warn('你在使用runtime-only版本的Vue，无法编译template，请把模版预编译成渲染函数，或使用有compiler的版本', vm)
+        warn('你在使用运行时版本的Vue，无法编译模板，请把模版预编译成渲染函数，或使用有编译器的版本', vm)
       } else {
         warn('挂载组件失败：模版和render函数未定义', vm)
       }
     }
-    callHook(vm, 'beforeMount') // 挂载之前调用beforeMount生命周期函数
-    const updateComponent = () => { // updateComponent内部调用实例的_update方法
-      vm._update(vm._render(), hydrating) // 传入 按实例的配置对象生成的新的vnode树和hydrating
+    callHook(vm, 'beforeMount') // 组件实例挂载前调用beforeMount生命周期函数。
+    const updateComponent = () => {
+      vm._update(vm._render(), hydrating)
     }
-    // vm._render执行实例的options中的render选项，返回一份最新的vnode树。vm._update把生成的vnode树渲染成真正的DOM，是通过patch方法来执行节点的比对和渲染操作。简而言之，updateComponent做的是渲染操作
-    
-    // 挂载是持续性的，不是渲染一次就完事，渲染之后每次数据发生变化都会进行重新渲染，这是通过为渲染函数创建watcher实现的，即第二个参数就是updateComponent
-    // new Watcher会对updateComponent函数求值，它的执行会间接执行渲染函数，从而会触发数据属性的getter，将该渲染函数的watcher收集到dep，即渲染函数中依赖的所有数据都会被watcher观察，当数据变化时，将重新对updateComponent函数求值，从而重新渲染
-    new Watcher(vm, updateComponent, noop, { //第三个参数cb是被观测目标变化的回调
-      before() { // before选项传入一个函数，在数据变化后，更新执行前执行
-        if (vm._isMounted && !vm._isDestroyed) { // beforeUpdate执行的条件是组件已经挂载完毕且没有被销毁
-          callHook(vm, 'beforeUpdate')
-        }
+    // 然后定义updateComponent函数，它是要被观察的函数，内部调用vm._render()执行vm.$options.render渲染函数，生成一份最新的vnode树，接着执行vm._update，比对新旧vnode树，把生成的vnode树渲染成真实DOM，其核心就是vm.__patch__，总之updateComponent做的是渲染操作。
+    // 挂载是持续性的，不是渲染一次就完事，渲染之后每次数据发生变化都会进行重新渲染，这是通过为updateComponent创建watcher实现的。new Watcher会对updateComponent函数求值，它的执行会间接执行渲染函数，从而触发数据属性的getter，将该渲染函数的watcher收集到dep，即渲染函数中依赖的所有数据都会被该watcher观察，当数据变化时，将重新对updateComponent函数求值，从而重新渲染
+    new Watcher(vm, updateComponent, noop, { //第三个参数是cb
+      before() {
+        if (vm._isMounted && !vm._isDestroyed) callHook(vm, 'beforeUpdate')
       }
-    }, true /*isRenderWatcher*/) //只有创建渲染函数的watcher才传true
-    // cb传noop，即当数据变化时，在run方法中执行cb时什么都不做，但没关系，还会this.get()对被观测目标求值，即执行updateComponent，因此重新渲染是靠重新求值而不是cb的执行。问题又出现了，updateComponent的重复执行会多次触发数据属性的get，是不会导致重复收集依赖？不会，因为做了避免重复收集依赖的处理
-    hydrating = false;
-    // 手动安装实例，mounted调用挂载在自身，渲染创建的子组件在其插入的钩子中调用了mounted
-    if (vm.$vnode == null) { //vm.$vnode为空，说明没有父vnode，实例是根组件实例
-      vm._isMounted = true; // 根实例添加_isMounted属性，值为true，标识根实例挂载完成
-      callHook(vm, 'mounted'); // 对于根组件，调用mounted钩子函数
+    }, true /*只有渲染函数的watcher才传真*/)
+    // cb传noop，即当数据变化时，在run方法中执行cb时什么都不做，但this.get()会对呗观察目标求值，即执行updateComponent，重新渲染是靠重新求值而不是cb的执行。那么，updateComponent的重复执行会触发多次数据属性的get，但不会导致重复收集依赖，因为做了处理。 before选项传入了一个函数，在数据变化后，更新执行前执行。函数内容是，如果组件已经挂载完毕且没有被销毁，则调用beforeUpdate钩子函数
+    hydrating = false
+    // 如果vm.$vnode为空，说明当前没有父级vnode，当前实例是根实例，给根实例添加_isMounted属性，值为true，标识根实例挂载完成，再调用mounted钩子函数
+    if (vm.$vnode == null) {
+      vm._isMounted = true
+      callHook(vm, 'mounted')
     }
     return vm
   }
-  // 这是runtime-only版的Vue的$mount函数，核心是mountComponent函数
+  // 这是runtime-only版的Vue的$mount函数，核心是执行mountComponent(真正的挂载)
   Vue.prototype.$mount = function (el, hydrating) {
-    el = el && inBrowser ? query(el) : undefined; // 如果传了el，并且当前是浏览器，则将el传给query函数执行，获取对应的dom元素并将返回值覆盖el变量，否则el为undefined。
-    return mountComponent(this, el, hydrating) // $mount实际就是调用mountComponent
+    el = el && inBrowser ? query(el) : undefined
+    return mountComponent(this, el, hydrating)
   }
 
   if (inBrowser) {
@@ -6701,20 +6655,13 @@
         if (devtools) {
           devtools.emit('init', Vue);
         } else {
-          console[console.info ? 'info' : 'log'](
-            'Download the Vue Devtools extension for a better development experience:\n' +
-            'https://github.com/vuejs/vue-devtools'
-          );
+          console[console.info ? 'info' : 'log']('Download the Vue Devtools extension for a better development experience:\nhttps://github.com/vuejs/vue-devtools');
         }
       }
       if (config.productionTip !== false &&
         typeof console !== 'undefined'
       ) {
-        console[console.info ? 'info' : 'log'](
-          "You are running Vue in development mode.\n" +
-          "Make sure to turn on production mode when deploying for production.\n" +
-          "See more tips at https://vuejs.org/guide/deployment.html"
-        );
+        console[console.info ? 'info' : 'log']("You are running Vue in development mode.\nMake sure to turn on production mode when deploying for production.\nSee more tips at https://vuejs.org/guide/deployment.html");
       }
     }, 0);
   }
@@ -8921,7 +8868,6 @@
   // compile函数和compileToFunctions区别是compile生成字符串形式的代码，compileToFunctions生成真正可执行的代码（本身是用compileToFunctions根据compile生成的）
   // 在创建编译器时传入基本编译器选项，当真正使用编译器编译模版时，依然可以传递编译器选项，并且新的选项和基本选项会以合适的方式融合或覆盖。
 
-  // check whether current browser encodes a char inside attribute values
   var div;
   function getShouldDecode (href) {
     div = div || document.createElement('div');
@@ -8929,66 +8875,67 @@
     return div.innerHTML.indexOf('&#10;') > 0
   }
 
-  // #3663: IE encodes newlines inside attribute values while other browsers don't
   var shouldDecodeNewlines = inBrowser ? getShouldDecode(false) : false;
-  // #6828: chrome encodes content in a[href]
   var shouldDecodeNewlinesForHref = inBrowser ? getShouldDecode(true) : false;
 
-  //原函数的行为是返回id对应的元素的innerHTML字符串。同一个id多次调用，第二次开始就不再执行原函数，从缓存中取
-  var idToTemplate = cached((id) => {
+  //原函数是返回id对应的元素的innerHTML字符串。同一个id多次调用，第二次开始就不再执行原函数，从缓存中取
+  var idToTemplate = cached(id => {
     var el = query(id);
     return el && el.innerHTML
   });
 
   const mount = Vue.prototype.$mount; // 先缓存一份不带编译器的$mount函数
-  // 完整版Vue的$mount函数，兼具了运行时的$mount的基础上增加了编译模版的能力。Webpack的vue-loader会在构建时将Vue文件中的模版预编译成JS，因此最后打包好的Vue里不需要编译器的，用运行时版本Vue即可，因此生命周期中没有模版编译的阶段。
+  // 完整版Vue的$mount函数，在运行时的$mount的基础上增加了编译模版的能力。Webpack的vue-loader会在构建时将Vue文件中的模版预编译成JS，因此最后打包好的Vue里不需要编译器的，用运行时版本Vue即可，因此生命周期中没有模版编译的阶段。
+  // 得到初始化的实例后，就开始组件的挂载，首先将render函数转为vnode，然后将vnode转为真实DOM插入到页面完成渲染，完成挂载后，会在当前组件实例this挂载$el属性，它就是完成挂载后对应的真实DOM
   Vue.prototype.$mount = function (el, hydrating) {
-    el = el && query(el); // 如果传了el，就调用query获取到对应的DOM元素，并覆盖el
+    // 如果传了el，就获取el对应的DOM节点，即组件挂载的占位节点
+    el = el && query(el)
     if (el === document.body || el === document.documentElement) {
-      warn("不要把Vue实例挂载到html/body元素上，挂载点本意就是组件挂载的占位，它将会被组件自身的模版替换掉，而body/html元素明显是不能被替换的。");
+      warn("不要把Vue实例挂载到html/body元素上，挂载点本意就是组件挂载的占位符，它将会被组件自身的模版替换掉，而body/html元素不能被替换");
       return this
     }
-    var options = this.$options; // 获取options
-    if (!options.render) {//如果用户写了渲染函数，就直接调用不含编译器的$mount函数。否则使用template/el选项构建render函数。所有Vue组件的渲染最终都需要渲染函数，无论是单文件.vue方式开发组件，还是写了el或template选项，最后都会通过compileToFunctions函数转成渲染函数
-      var template = options.template; //没有render，优先通过template选项获取合适的内容作为模版字符串。
-      if (template) { // 如果传了template选项，判断它是字符串/元素节点/其他
-        if (typeof template === 'string') { // 如果template是字符串且第一个字符是#，则把它作为css选择符
-          if (template.charAt(0) === '#') { // 去获取对应的DOM元素，并把元素的innerHTML作为模版字符串
-            template = idToTemplate(template); // idToTemplate返回指定元素的innerHTML字符串
-            if (!template) // 没有获取到对应的元素或元素的innerHTML为空字符串，报出警告
-              warn(("Template元素没有找到或是空的：" + (options.template)), this);
+    var options = this.$options // 获取options，$options是在_init方法执行时产生
+    // 如果用户传了渲染函数，直接调用不带编译器的$mount函数，否则使用template/el选项自己构建render函数。所有组件的渲染最后都要有渲染函数，无论是单文件.vue方式开发组件，还是传el或template选项，最后都会通过compileToFunctions转成渲染函数。没有render，先过template选项获取合适的内容作为模板字符串，template选项有可能是字符串/元素节点/其他，如果是字符串且首字符是#，则把它作为css选择符去获取对应的DOM元素，并把元素的innerHTML作为模版字符串。没有获取到对应的DOM元素，或innerHTML为空字符串，报出警告
+    if (!options.render) {
+      var template = options.template
+      if (template) {
+        if (typeof template === 'string') {
+          if (template.charAt(0) === '#') {
+            template = idToTemplate(template)
+            if (!template) warn(("Template元素没有找到或是空的：" + (options.template)), this)
           }
-          // 如果template作为字符串但第一个字符不是#，什么都不做，就用template自身作为模版字符串
-        } else if (template.nodeType) { // template是元素节点，则它的innerHTML作为模版字符串
+        // 如果template作为字符串但第一个字符不是#，什么都不做，就用template自身作为模版字符串。如果template是元素节点，则它的innerHTML作为模版字符串，如果template不是字符串也不是DOM元素，报警提示用户传入的template选项无效
+        } else if (template.nodeType) {
           template = template.innerHTML;
-        } else { // 如果template不是字符串也不是DOM元素，报警提示用户传入的template选项无效
+        } else {
           warn('无效的template选项:' + template, this)
           return this
         }
-      } else if (el) { //没传template，如果传了el，则使用el.outerHTML作为template字符串
+      } else if (el) { // 没传template但传了el，则使用el.outerHTML作为template字符串
         template = getOuterHTML(el);
       }
-      if (template) {//template有可能是''，如果不为''则调用compileToFunctions
-        var { render, staticRenderFns } = compileToFunctions(template, {//编译模版字符串
+      // template有可能是空字符串，如果不为空，调用compileToFunctions编译模板字符串，从返回值中解构出render函数，添加到$options对象的render属性
+      if (template) {
+        var { render, staticRenderFns } = compileToFunctions(template, {
             outputSourceRange: "development" !== 'production',
             shouldDecodeNewlines,
             shouldDecodeNewlinesForHref,
             delimiters: options.delimiters,
             comments: options.comments
           }, this);
-        options.render = render; // 将渲染函数添加到 $options选项中
+        options.render = render
         options.staticRenderFns = staticRenderFns;
       }
     }
-    // 前面做是获取合适的template字符串并编译成渲染函数，接着调用不含编译功能的$mount
+    // 前面做是获取合适的template字符串并编译成渲染函数，接着调用不含编译功能的$mount，进行真正的挂载
     return mount.call(this, el, hydrating)
   };
 
-  // 获取描述一个DOM元素的（包括其后代）HTML字符串
+  // 获取描述一个DOM元素的（包括其后代）HTML字符串。注意IE9-11中SVG元素没有innerHTML和outerHTML属性，把SVG元素放到一个新建的DIV元素中，div元素的innerHTML就等价于SVG元素的outerHTML
   function getOuterHTML(el) {
-    if (el.outerHTML) { // el.outerHTML存在的话，直接返回el.outerHTML
+    if (el.outerHTML) {
       return el.outerHTML
-    } else { // IE9-11中SVG元素没有innerHTML和outerHTML属性，我们把SVG元素放到一个新建的DIV元素中，这样div元素的innerHTML就等价于SVG元素的outerHTML
+    } else {
       var container = document.createElement('div');
       container.appendChild(el.cloneNode(true));
       return container.innerHTML

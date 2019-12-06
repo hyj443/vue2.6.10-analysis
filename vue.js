@@ -386,7 +386,7 @@
       this.fnOptions = undefined; // 
       this.fnScopeId = undefined; // 
       this.key = data && data.key; // 节点的唯一标志，diff时候有用
-      this.componentOptions = componentOptions; // 虚拟节点组件的配置对象
+      this.componentOptions = componentOptions; // 当前vnode节点对应的组件配置对象
       this.componentInstance = undefined; // 当前vnode对应的组件实例
       this.parent = undefined; // 当前节点的父节点，即组件占位符节点
       this.raw = false; //是否为原生HTML或只是普通文本，innerHTML的时候为true，textContent的时候为false
@@ -403,15 +403,15 @@
       return this.componentInstance
     }
   }
-  const createEmptyVNode = (text = '') => { // 创建一个注释节点对象
-    const node = new VNode() // 创建VNode实例
-    node.text = text // 默认设置text属性为''
-    node.isComment = true // 设置为注释节点
-    return node // 一个注释节点只有两个有效属性:text和isComment
+  // 创建一个空的注释vnode节点
+  const createEmptyVNode = (text = '') => { 
+    const node = new VNode()
+    node.text = text
+    node.isComment = true 
+    return node
   }
-  
+  // 创建一个文本vnode节点
   let createTextVNode = val => new VNode(undefined, undefined, undefined, String(val))
-  // 创建一个文本节点vnode
 
   // 克隆节点是将现有节点的属性复制到新节点中，作用是优化静态节点和插槽节点
   // 以静态节点为例，它的内容不会改变，所以除了首次渲染需要执行渲染函数获取vnode外，后续更新不需要执行渲染函数重新生成静态vnode节点，因此使用克隆节点方法将vnode克隆一份，使用克隆节点进行渲染，就不用重新执行渲染函数生成新的静态节点的vnode
@@ -1343,33 +1343,31 @@
       }
     });
   }
-  // 给vm添加_renderProxy属性，使用proxy对vm做一层代理，生产环境下initProxy就是undefined
+  // 给vm添加_renderProxy属性，使用proxy对vm做一层代理，在开发环境给开发者一个友好的提示。生产环境下initProxy是undefined
   initProxy = function (vm) {
     if (hasProxy) { // 判断宿主环境是否支持原生的Proxy
-      let handler = { // has方法可以拦截in属性查询操作，继承属性查询操作，即：xx in proxy，xx in Object.create(proxy)，还可以拦截with(proxy){(foo);}，with语句块里对变量的访问proxy
+      let handler = {
+      // has方法可以看做是in操作的钩子，可以拦截xxx in proxy这样的属性查询，xxx in Object.create(proxy)这样的继承属性查询，还有with语句with(proxy){(foo);}里对变量的访问
         has(target, key) {
           var has = key in target;
-          var isAllowed = allowedGlobals(key) || //allowedGlobals(key)为真说明key是全局对象
-            (typeof key === 'string' && key.charAt(0) === '_' && !(key in target.$data))
-          // 除了允许全局对象之外，还允许以_开头的属性，是因为渲染函数中会有很多以_开头的内部方法，如_c、_v
-
-          if (!has && !isAllowed) { //如果你访问的属性既不在在实例上(或原型链上)有定义，又不是全局对象，需要提示开发者。如果你访问的不是实例上(原型链上)的属性，但你可以访问全局对象，注意是在模版中访问。因为vm._renderProxy会用在模版的编译，用于拦截渲染函数中with语句中对变量的访问。比如<template>{{Number(b)+2}}</template> Number是全局对象，可以访问
-
-            if (key in target.$data) { //$开头的key必须用$data.key访问，因为以$或_开头的属性不会被VUE实例代理，防止与VUE内部冲突。
-              warn(`Property "${key}" must be accessed with "$data.${key}" because properties starting with "$" or "_" are not proxied in the Vue instance to prevent conflicts with Vue internals. `, target);
+          var isAllowed = allowedGlobals(key) || (typeof key === 'string' && key.charAt(0) === '_' && !(key in target.$data))
+          // has为真，表示key属性存在于vm上或它的原型链上，isAllowed为真，表示key是允许的全局对象或以_开头的不在vm.$data上的字符串，因为渲染函数中很多以_开头的内部方法，这样的key都允许被访问
+          if (!has && !isAllowed) {
+          // 渲染函数内部使用with语句，指定了内部代码的执行上下文this，由于渲染函数调用时用call指定了this指向vm._renderProxy，所以with语句块中的执行上下文就是vm._renderProxy，所以在with语句中访问a就相当于访问vm._renderProxy的a属性，因为vm._renderProxy是proxy代理对象，所以with语句块内访问变量会被proxy的has代理拦截，触发handler中的has函数，has函数中判断如果访问的属性既不在实例上(或原型链上)有定义，又不是全局变量，则需要提示开发者。
+            if (key in target.$data) {
+              warn(`${key}这个属性在vm.$data或它的原型链上存在，它必须通过$data访问，因为以“$”或“_”开头属性在Vue实例中没有代理，因为要防止和Vue内部的属性冲突`, target);
             } else { // 警告在渲染的时候引用了key，但在实例上并没有定义key这个属性或方法。
-              warn(`Property or method "${key}" is not defined on the instance but referenced during render. Make sure that this property is reactive, either in the data option, or for class-based components, by initializing the property.`, target);
+              warn(`属性或方法"${key}"在实例上没有定义但在渲染时引用了它，确保这个属性是响应式的，无论是在data选项中，还是对于基于类的组件.`, target);
             }
           }
-          return has || !isAllowed
+          return has || !isAllowed // has方法返回一个boolean值
         }
       };
       vm._renderProxy = new Proxy(vm, handler) // 之后访问vm._renderProxy，如果属性值为proxy实例，则代理对象handler的has函数会拦截with语句中对变量的访问
-    } else { // 宿主环境不支持原生的Proxy，vm的_renderProxy就为vm
-      vm._renderProxy = vm // 即不代理了
+    } else { // 宿主环境不支持原生的Proxy，vm的_renderProxy就为vm，不代理了
+      vm._renderProxy = vm
     }
   };
-
 
   var seenObjects = new Set();
   // 递归地读取一个对象的每个子属性的值，以此触发它们的get，做依赖收集
@@ -2098,13 +2096,12 @@
         !vnode.componentInstance._isDestroyed &&
         vnode.data.keepAlive
       ) {
-        var mountedNode = vnode; //
-        componentVNodeHooks.prepatch(mountedNode, mountedNode);
-      } else { //当还没创建组件实例时，vnode是没有componentInstance的，vnode.data.keepAlive也没有值，創建组件实例，并将赋给vnode的componentInstance
-        var child = vnode.componentInstance = createComponentInstanceForVnode(
-          vnode, activeInstance // 当前正在渲染的实例
-        )//创建完子组件实例后，将子组件实例赋给vnode.componentInstance，这样，组件占位vnode和组件实例就有了联系
-        child.$mount(hydrating ? vnode.elm : undefined, hydrating)//组件实例调用$mount方法进行实例的挂载，非ssr时第一个参数为undefined而不是实际元素，意味着将执行vm._render和vm._update(调用vm.__patch__创建组件的DOM树)，但由于没有提供实际元素el，并不会将DOM树插入到父元素，插入到父元素的操作将在初始化子组件实例时完成，即initComponent和insert函数
+        var mountedNode = vnode
+        componentVNodeHooks.prepatch(mountedNode, mountedNode)
+      } else { //当还没为vnode创建组件实例时，vnode.componentInstance不存在，vnode.data.keepAlive也没有值，創建子组件实例，并赋给vnode.componentInstance，组件的vnode就和组件实例有了联系
+        var child = vnode.componentInstance = createComponentInstanceForVnode(vnode, activeInstance)
+        child.$mount(hydrating ? vnode.elm : undefined, hydrating)
+        // 组件实例调用$mount方法进行实例的挂载渲染，非ssr时，第一个参数传undefined，即没有提供实际元素el，意味着在执行vm._render和vm._update(调用vm.__patch__创建组件的DOM树)时，并不会将组件的DOM树插入到父节点上，插入到父元素的操作将在初始化组件实例后，即createComponent中，initComponent执行后，insert执行中完成
       }
     },
     prepatch (oldVnode, vnode) {
@@ -2147,7 +2144,7 @@
 
   var hooksToMerge = Object.keys(componentVNodeHooks);
 
-  // 创建子组件vnode，或叫子组件占位vnode，在最终创建的DOM树中，它不会对应一个DOM节点，即不会出现在DOM树里，只出现在vnode树里。内置组件和普通组件在编译成渲染函数时处理方式是一样的，有了渲染函数，就开始从子组件到父组件生成组件vnode的过程：_c('xxx'...)的处理，执行createElement中调用该函数去创建子组件vnode
+  // 创建子组件的vnode，在最终生成的DOM树中，它不会对应一个DOM节点，即不会出现在DOM树里，只出现在vnode树里。内置组件和普通组件在编译成渲染函数时处理方式是一样的，有了渲染函数，就开始从子组件到父组件生成组件vnode的过程：_c('xxx'...)的处理，执行createElement中调用该函数去创建子组件vnode
   function createComponent(Ctor, data, context, children, tag) {
     if (isUndef(Ctor)) return // Ctor没有定义，直接返回
     var baseCtor = context.$options._base; // 基础构造器Vue
@@ -2189,12 +2186,13 @@
     return vnode
   }
 
-  // 为组件占位的vnode创建组件实例，parent接收activeInstance，即正在活动状态的父组件
+  // 为组件的vnode创建组件实例，parent接收activeInstance，即正在活动状态的父组件
   function createComponentInstanceForVnode(vnode, parent) {
-    var options = {//这是创建子组件实例时传入的options对象
-      _isComponent: true,//标识创建的这个组件实例是是内部子组件
-      _parentVnode: vnode, //vnode是当前子组件的占位vnode
-      parent //创建当前子组件实例时，当前处于活动状态的父组件
+    // 首先准备好创建子组件时传入的options对象，里面有_isComponent属性，标识创建的是内部子组件的实例，_parentVnode记录当前子组件的占位vnode，parent记录创建当前子组件实例时，当前处于活跃状态的父组件
+    var options = {
+      _isComponent: true,
+      _parentVnode: vnode, 
+      parent
     }
     var inlineTemplate = vnode.data.inlineTemplate;
     if (isDef(inlineTemplate)) {
@@ -2207,7 +2205,7 @@
   // 給組件的vnode.data.hook上挂载一系列組件管理的鉤子函數
   function installComponentHooks (data) {
     var hooks = data.hook || (data.hook = {})
-    //给vnode.data添加hook属性(对象)，遍历['init','prepatch','insert','destroy']，这是4个组件的钩子函数名，如果data.hook中当前钩子和将要合并的钩子不同，且现有的钩子不存在或存在但不是合并后的钩子，则如果现有的钩子存在，调用mergeHook将两个钩子合并为一个，如果不存在现有的钩子，直接将要合并的钩子toMerge存到data.hook对象中
+    //给vnode.data添加hook属性(对象)，遍历4个组件的钩子函数名init、prepatch、insert、destroy，如果data.hook中当前钩子和将要合并的钩子不同，且现有的钩子不存在或存在但不是合并后的钩子，则如果现有的钩子存在，调用mergeHook将两个钩子合并为一个，如果不存在现有的钩子，直接将要合并的钩子toMerge存到data.hook对象中
     for (var i = 0; i < hooksToMerge.length; i++) {
       var key = hooksToMerge[i]
       var existing = hooks[key]
@@ -2244,38 +2242,30 @@
 
   var SIMPLE_NORMALIZE = 1;
   var ALWAYS_NORMALIZE = 2;
-
-  // createElement 到底会返回什么呢？其实不是一个实际的 DOM 元素。它更准确的名字可能是 createNodeDescription，因为它所包含的信息会告诉 Vue 页面上需要渲染什么样的节点，包括及其子节点的描述信息。我们把这样的节点描述为“虚拟节点 (virtual node)”，也常简写它为“VNode”。“虚拟 DOM”是我们对由 Vue 组件树建立起来的整个 VNode 树的称呼。
-
-  // createElement返回VNode对象，它不是实际的DOM元素，vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息，vnode又叫虚拟节点。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
+  // createElement返回VNode对象，vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
   function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
-    // tag是元素标签名/组件名，data是当前vnode属性，是个对象，children是子节点，是数组
+    // tag是元素标签名/组件名，data是当前vnode属性配置对象，children是子节点数组
     if (Array.isArray(data) || isPrimitive(data)) {//如果data是个数组或基本类型值
       normalizationType = children;
       children = data; // 修正children
       data = undefined; // 修正data为undefined
     }
-    if (isTrue(alwaysNormalize)) {
-      normalizationType = ALWAYS_NORMALIZE;
-    }
-    return _createElement(context, tag, data, children, normalizationType) //创建虚拟vnode节点
+    if (isTrue(alwaysNormalize)) normalizationType = ALWAYS_NORMALIZE;
+    return _createElement(context, tag, data, children, normalizationType)
   }
-
+  // createElement做了参数的归一化处理后，真正调用_createElement创建vnode节点
   function _createElement(context, tag, data, children, normalizationType) {
-    if (isDef(data) && isDef((data).__ob__)) { // 如果创建vnode节点传入的data是被观测过的，会警告
-      warn(`不能使用被观测的data作为虚拟节点(vnode)的data：${ JSON.stringify(data) }\n 因为data在vnode渲染的过程中可能会被改变，这样会触发依赖，导致不符合预期的操作` + '，Always create fresh vnode data objects in each render!', context);
+    // 传入的data不能是被观测过的，否则报警，函数返回一个空vnode节点 
+    if (isDef(data) && isDef((data).__ob__)) {
+      warn(`不能使用被观测的data作为vnode的data：${JSON.stringify(data)}\n 因为data在vnode渲染的过程中可能会被改变，这样会触发依赖，导致不符合预期的操作` + '，Always create fresh vnode data objects in each render!', context);
       return createEmptyVNode() // 返回一个空vnode节点
     }
     // 如果is属性存在，将is属性值赋给标签名tag
-    if (isDef(data) && isDef(data.is)) {
-      tag = data.is;
-    }
-    if (!tag) { // 如果tag没传，或is属性被赋予一个假值，Vue将不知道这个组件要渲染成什么，所以返回一个空vnode节点
-      return createEmptyVNode()
-    }
-    // 如果key存在，且key值不少基本类型值，警告
-    if (isDef(data) && isDef(data.key) && !isPrimitive(data.key)
-    ) {
+    if (isDef(data) && isDef(data.is)) tag = data.is
+    if (!tag) return createEmptyVNode()
+    // 如果tag没传，或is属性被赋予一个假值，将不知道这个组件要渲染成什么，所以返回一个空vnode节点
+    // 如果key存在，但key值不是基本类型值，警告，必须是字符串或数字，不能是引用值
+    if (isDef(data) && isDef(data.key) && !isPrimitive(data.key)) {
       warn('节点的key值必须是字符串/数字，不要使用引用类型值', context);
     }
     if (Array.isArray(children) && typeof children[0] === 'function') {
@@ -2289,23 +2279,20 @@
       children = simpleNormalizeChildren(children);
     }
     var vnode, ns;
-    if (typeof tag === 'string') { // 如果标签名是字符串类型
+    if (typeof tag === 'string') { // 如果tag是字符串
       var Ctor;
       ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag);
       // 如果标签是普通html标签，直接创建vnode节点
       if (config.isReservedTag(tag)) {
         vnode = new VNode(
-          config.parsePlatformTagName(tag), data, children,
-          undefined, undefined, context
+          config.parsePlatformTagName(tag), data, children, undefined, undefined, context
         );
-      } else if ((!data || !data.pre) &&
-        isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
-      // 是组件，调用resolveAsset根据标签名获取已注册的组件构造器，可能是局部组件，也可能是全局组件，如果有值，说明该占位符组件已经注册过，调用createComponent创建子组件vnode
+      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { // 调用resolveAsset根据tag获取已注册的组件构造器，可能是局部组件，也可能是全局组件，如果有值，说明该占位符组件已经注册过，调用createComponent创建子组件vnode
         vnode = createComponent(Ctor, data, context, children, tag)
       } else {
         vnode = new VNode(tag, data, children, undefined, undefined, context);
       }
-    } else { // tag不是字符串时，执行createComponent创建一个Component对象
+    } else { // 如果tag不是字符串，执行createComponent创建一个Component对象
       //直接的component配置对象或构造函数
       vnode = createComponent(tag, data, context, children);
     }
@@ -2374,32 +2361,33 @@
 
   var currentRenderingInstance = null;
 
-  function renderMixin (Vue) {
-    installRenderHelpers(Vue.prototype);// 给Vue原型添加一些运行时相关的辅助方法
-
-    //如果需要在数据更新后对新的DOM做一些操作，但在同步代码中是获取不到更新后的DOM的，因为DOM还没重新渲染。这时需要调用$nextTick将操作放在回调中，回调会延迟到下次DOM更新循环之后执行，确保操作的是更新后的DOM。
-    Vue.prototype.$nextTick = function (fn) { // $nextTick是对nextTick的简单封装
-      return nextTick(fn, this) // nextTick不止用在这，还用在nextTick(flushQueueWatcher)，即：将更新DOM的回调推入callbacks数组中。所以要想在$nextTick的fn中操作最新的DOM，就必须在修改数据之后调用$nextTick(fn)，这样callbacks数组中更新DOM的回调在fn之前，存在执行的先后。
+  function renderMixin(Vue) {
+    // 给Vue原型添加一些渲染函数中用到的辅助方法
+    installRenderHelpers(Vue.prototype)
+    //如果需要在数据更新后对新的DOM做一些操作，但在同步代码中是获取不到更新后的DOM的，因为DOM还没重新渲染。$nextTick就是供你操作更新后的DOM的API，修改数据后调用$nextTick，将操作最新的DOM操作放在回调中，回调会延迟到下次DOM更新循环之后执行(即下一次微任务队列执行)，确保操作的是更新后的DOM。
+    Vue.prototype.$nextTick = function (fn) {
+      return nextTick(fn, this) // nextTick不止用在这，还用在nextTick(flushQueueWatcher)，这是将更新DOM的回调推入callbacks数组中。所以要想在$nextTick的fn中操作最新的DOM，就必须在修改数据之后调用$nextTick(fn)，这样callbacks数组中更新DOM的回调在fn之前，存在执行的先后。
     }
-
-    // _render是内部用来根据配置对象在内部生成虚拟vnode节点，作为传入_update的第一个参数。渲染函数本质是创建vnode，即各种递归调用_createElement函数，而createElment函数就是创建Vnode
+    // _render是内部用来根据配置对象在内部生成vnode节点，作为传入_update的第一个参数。渲染函数本质是创建vnode树，即各种递归调用createElement函数，而createElment函数就是创建Vnode
     Vue.prototype._render = function () {
-      var vm = this; // 将Vue实例赋给vm变量
-      var render = vm.$options.render; // 获取$options对象的render方法
-      var _parentVnode = vm.$options._parentVnode; // 和_parentVnode对象
-      if (_parentVnode) { // 如果有父级虚拟节点，定义并赋值实例的$scopedSlots属性
+      var vm = this
+      var render = vm.$options.render
+      var _parentVnode = vm.$options._parentVnode
+      // vm指向当前实例，获取当前vm.$options.render即渲染函数，获取当前vm的父vnode节点
+      if (_parentVnode) { // 如果有父级vnode节点，定义并赋值实例的$scopedSlots属性
         vm.$scopedSlots = normalizeScopedSlots(
           _parentVnode.data.scopedSlots,
           vm.$slots,
           vm.$scopedSlots
         )
       }
-      vm.$vnode = _parentVnode // 设置实例的父虚拟节点，允许render函数访问占位符节点的数据
-      var vnode // 定义渲染节点
+      vm.$vnode = _parentVnode // 给vm实例添加$vnode属性，记录实例的父vnode节点
+      var vnode
       try {
-        // 不需要维护栈，因为所有渲染函数都是彼此独立调用的。在patch父组件时会调用嵌套组件的渲染函数
+        // currentRenderingInstance记录当前渲染的实例
         currentRenderingInstance = vm
-        vnode = render.call(vm._renderProxy, vm.$createElement); // 调用render函数，并用call指定this为vm._renderProxy，render函数大概长这样：
+        vnode = render.call(vm._renderProxy, vm.$createElement)
+        // 执行渲染函数，并用call指定this为vm._renderProxy，render函数大概长这样：
         // vm.$options.render = function () {
         //   with(this){ return _c('div', [_v(_s(a))]) }
         // }
@@ -2564,8 +2552,8 @@
     }
   }
 
-  // 模版编译阶段，可以得到某个标签上的所有属性，包括v-on或@注册的事件，整个模版会编译成渲染函数，其实就是一些嵌套在一起的创建元素节点的函数，类似这样：_c(tagName,data,children)。当渲染流程启动后，渲染函数执行生成一份vnode，随后虚拟dom会使用vnode进行对比和渲染，这个过程中会创建一些元素，此时会判断当前标签是真的标签还是一个组件，如果是组件标签，则会将子组件实例化并传入一些参数，其中包括父组件在模版中使用v-on注册在子组件标签上的事件；如果是一般标签，则创建元素并插入到dom中，同时将v-on注册的事件注册到浏览器事件中。简而言之，组件标签上的v-on注册的事件会注册到子组件的事件系统中，如果是一般标签上的v-on，事件会被注册到浏览器事件中。
-  // 子组件在初始化时，即初始化vm时，可能会接收父组件向子组件注册的事件，而子组件自身在模版中注册的事件，只有在渲染时才会根据虚拟dom的对比结果来确定是注册事件还是解绑事件，所以在初始化实例时，被初始化的事件指的是父组件在模版中使用v-on监听子组件内触发的事件。
+  // 模版编译阶段，可以得到某个标签上的所有属性，包括v-on或@注册的事件，整个模版会编译成渲染函数(一些嵌套在一起的创建vnode节点的函数)，类似这样：_c('div'...)。当渲染流程启动后，渲染函数执行生成一份vnode，随后patch函数会使用vnode进行对比和渲染，这个过程中会创建一些元素，此时会判断当前标签是真的标签还是一个组件，如果是组件标签，则会将子组件实例化并传入一些参数，其中包括父组件在模版中使用v-on注册在子组件标签上的事件；如果是一般标签，则创建元素并插入到dom中，同时将v-on注册的事件注册到浏览器事件中。简而言之，组件标签上的v-on注册的事件会注册到子组件的事件系统中，如果是一般标签上的v-on，事件会被注册到浏览器事件中。
+  // 子组件在初始化时，即初始化vm时，可能会接收父组件向子组件注册的事件，而子组件自身在模版中注册的事件，只有在渲染时才会根据vnode的对比结果来确定是注册事件还是解绑事件，所以在初始化实例时，事件的初始化指的是父组件在模版中使用v-on监听子组件内触发的事件。
   function initEvents (vm) {
     vm._events = Object.create(null); // vm实例挂载_events属性，是对象，保存所有用$on注册的事件
     vm._hasHookEvent = false; // 给vm添加_hasHookEvent属性，初始化为false
@@ -3120,7 +3108,7 @@
     run() { //被观察的目标发生变化，不管是同步更新or异步更新，更新变化的操作都是通过执行run方法
       if (!this.active) return // 如果watcher已经执行了teardown，不再观察任何状态了
       // 我们知道new Watcher时传入了cb，即被观察的目标变化后的回调，所以重新求值时run函数里肯定要执行cb，但对渲染函数的watcher而言，cb是什么都不做的noo。实际上重新求值并不是靠cb的执行
-      var value = this.get(); // this.get()意味着重新求值。创建渲染函数的watcher时，第二个参数传入updateComponent，重新求值意味着updateComponent执行，vm._update(vm._render(),hydrating)渲染函数执行生成虚拟dom，再渲染真实DOM完成重新渲染。而updateComponent没有返回值，所以对渲染函数的watcer来说，this.get()的返回值就是undefined，变量value和this.value都是undefined，所以不用执行下面的if语句块，它是给非渲染函数的watcher准备的。
+      var value = this.get(); // this.get()意味着重新求值。创建渲染函数的watcher时，第二个参数传入updateComponent，重新求值意味着updateComponent执行，vm._update(vm._render(),hydrating)渲染函数执行生成vnode，再渲染真实DOM完成重新渲染。而updateComponent没有返回值，所以对渲染函数的watcer来说，this.get()的返回值就是undefined，变量value和this.value都是undefined，所以不用执行下面的if语句块，它是给非渲染函数的watcher准备的。
       // 对被观察的目标重新求值不意味着一定执行回调cb，要看下面几个条件：
       if (value !== this.value || isObject(value) || this.deep) {
         // value是重新求值的新值，this.value是旧值，如果新值和旧值不一样，需要调用cb
@@ -3456,7 +3444,7 @@
           resolveConstructorOptions(vm.constructor), options || {}, vm
         )
       }
-      initProxy(vm); //设置渲染函数的作用域代理，为我们提供更好的提示信息。
+      initProxy(vm); //指定渲染函数的执行上下文为代理的vm，通过拦截函数提供友好的开发提示
       vm._self = vm; //注意vm._self和vm._renderProxy不同，用途不同，vm._renderProxy有可能是一个Proxy实例
       initLifecycle(vm); // 向实例挂载属性
       initEvents(vm); // 初始化事件
@@ -4029,16 +4017,25 @@
   var hooks = ['create', 'activate', 'update', 'remove', 'destroy'];
   // 这些钩子对应patch阶段的各个时机。DOM元素相关的属性、样式、事件等都是通过这些钩⼦完成设置
 
-  // 新旧vnode相似的话，则旧vnode就可以复用。我们知道，销毁一个DOM节点然后创建一个新的再插入是消耗很大的，无论是DOM对象本身的复杂性，还是这引起的重绘重排。所以期望尽可能复用现有的vnode进行更新
+  /*
+  判断两个VNode节点是否是同一个节点，需要满足以下条件
+  key相同
+  tag（当前节点的标签名）相同
+  isComment（是否为注释节点）相同
+  是否data（当前节点对应的对象，包含了具体的一些数据信息，是一个VNodeData类型，可以参考VNodeData类型中的数据信息）都有定义
+  当标签是<input>的时候，type必须相同
+*/
+
+  // 真实DOM元素本身就被浏览器设计的很复杂庞大，当销毁一个DOM节点然后创建一个新节点再插入是消耗很大的，如果简单地将整个DOM结构用innerHTML修改到页面，这引起的重绘重排，一定产生性能问题。所以希望更新DOM时，尽可能复用现有的vnode进行更新，只更新修改了的地方。
   function sameVnode(a, b) {
-    return a.key === b.key && // key是来自v-for自动添加的或自定义的:key属性，两个vnode相似就必须它们的key相同。key属性如果没有设置，则默认是undefined，当v-for渲染列表时会给节点一个唯一的key，key不一样的节点不进行复用。
-      ( // 下面两个只要有一个为真就行
-        (
-          a.tag === b.tag && //相同的vnode必须标签名一样
-          a.isComment === b.isComment && //isComment代表是否是注释节点，注释节点和非注释节点是不相同的，不能复用的
-          isDef(a.data) === isDef(b.data) && //如果一个有data一个没有任何属性，没必要进行复用，还不如直接渲染一个新的
-          sameInputType(a, b) //不同type属性的input元素，相当于不同的元素了，不复用
-        ) || ( // 暂时不看先，比较少用到
+    // key属性是v-for自动添加的或自定义的:key属性，key属性如果没有设置，默认为undefined，当v-for渲染列表时会给节点一个唯一的key，两个vnode相同就必须它们的key相同，key不一样的vnode不能复用
+    // 相同的vnode必须标签名一样，且不能是一个为注释节点一个不是注释节点，不能是一个有属性一个没有任何属性(没必要复用，还不如直接渲染新的)，如果是input元素还要type属性相同，如果不同就相当于不同的元素了
+    return a.key === b.key && ((
+          a.tag === b.tag && 
+          a.isComment === b.isComment && 
+          isDef(a.data) === isDef(b.data) &&
+          sameInputType(a, b)
+        ) || (
           isTrue(a.isAsyncPlaceholder) &&
           a.asyncFactory === b.asyncFactory &&
           isUndef(b.asyncFactory.error)
@@ -4115,15 +4112,14 @@
 
     var creatingElmInVPre = 0;
 
-    // 根組件是用戶new Vue創建的Vue實例，除了根組件實例之外的Vue實例統稱為子組件實例，而子組件都是在根組件調用__patch__的過程中創建，所以一般所說的組件都是子組件，根組件會單獨強調
-    // createElm函数創建vnode節點的vnode.elm，即vnode對應的真實節點。包含DOM节点的创建和插入两部分。不同類型的vnode决定了生成的真實節點也不同。對於組件佔位vnode來說，會調用createComponent來創建vnode的組件實例，對於非組件佔位的vnode來說，會創建對應的DOM節點。
+    // 根组件是用户new Vue创建的实例，除了根组件实例之外的组件实例都称为子组件实例，而子组件都是在根组件調用__patch__的过程中创建，所以一般所說的組件都是子組件
+    // createElm函数創建vnode節點的vnode.elm，即vnode對應的真實DOM節點，并插入到真实DOM树中。對於組件佔位vnode來說，會調用createComponent來創建vnode的組件實例，對於非組件佔位的vnode來說，會創建對應的DOM節點。
     function createElm(vnode, insertedVnodeQueue, parentElm, refElm, nested, ownerArray, index) {
-      if (isDef(vnode.elm) && isDef(ownerArray)) { // 如果vnode有对应的真实DOM节点，且有传ownerArray(具体它的含义目前我还没确定)，代表vnode在之前的渲染中用过，现在它要被用作新节点时，将导致潜在的patch错误，所以将vnode对象克隆一份，赋给ownerArray[index]和vnode
-        vnode = ownerArray[index] = cloneVNode(vnode)
-      }
+      // 如果vnode.elm存在，即该vnode已经有对应的真实DOM节点，在以前的渲染中使用过，现在它被用作一个新vnode，当它作为插入节点时，会导致潜在的patch错误，所以将vnode克隆一份，赋给ownerArray[index]和vnode
+      if (isDef(vnode.elm) && isDef(ownerArray)) vnode = ownerArray[index] = cloneVNode(vnode)
       vnode.isRootInsert = !nested; // 为检查过渡动画入口
       if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) return
-      //先調用createComponent，判斷該vnode是否是組件佔位vnode，如果是，則創建組件實例，並直接結束createElm；如果該vnode不是組件佔位vnode，則繼續createElm，為非組件佔位vnode創建對應的DOM元素/文本/注釋節點
+      //先調用createComponent，如果vnode是組件的vnode，则创建组件实例，，並直接結束createElm；如果該vnode不是組件佔位vnode，則繼續createElm，為非組件佔位vnode創建對應的DOM節點
       var data = vnode.data; // 获取vnode的节点信息data
       var children = vnode.children; // 获取vnode的子vnode
       var tag = vnode.tag; // 获取vnode的标签名
@@ -4156,29 +4152,31 @@
         insert(parentElm, vnode.elm, refElm);//创建文本节点然后插入到DOM
       }
     }
-    //该createComponent区别于另一个createComponent，那个是创建组件的vnode。這個是根據组件占位VNode创建组件实例和整个组件的DOM樹，如果parentElm存在，插入到父元素。對於非組件佔位vnode將不做任何操作，返回undefined
+    //该createComponent区别于另一个createComponent，那个是创建组件的vnode。這個是根據组件的VNode创建组件实例和整个组件的DOM树，如果parentElm存在，插入到父元素。對於非組件佔位vnode將不做任何操作，返回undefined
     function createComponent(vnode, insertedVnodeQueue, parentElm, refElm) {
       var i = vnode.data
-      if (isDef(i)) {
-        var isReactivated = isDef(vnode.componentInstance) && i.keepAlive//isReactivated为真代表vnode的组件实例已经创建且是且是keepAlive组件
-        if (isDef(i = i.hook) && isDef(i = i.init)) i(vnode, false) //如果存在vnode.data.hook.init钩子，则传入的vnode是组件占位vnode，调用钩子init，创建组件实例vnode.componentInstance，因此下面if条件成立，函数返回true，此时vnode已经完成组件实例的创建
-        if (isDef(vnode.componentInstance)) { // vnode的组件实例已经创建过了
-          initComponent(vnode, insertedVnodeQueue);// 初始化组件实例，设置vnode.elm
-          insert(parentElm, vnode.elm, refElm); //将vnode.elm插入到父元素下，refElm之前
-          if (isTrue(isReactivated)) { // 如果是keepAlive组件
-            reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
-          }
-          return true //如果传入的vnode不是组件占位vnode，不会存在vnode.data.hook.init钩子，也不会创建出组件实例vnode.componentInstance，因此最终createComponent返回undefined，createElm函数继续执行
-        }
+      if (!isDef(i)) return // 如果vnode没有任何数据信息，直接返回
+      var isReactivated = isDef(vnode.componentInstance) && i.keepAlive
+      // 如果isReactivated为真，代表vnode的组件实例已经创建而且是keepAlive组件。
+      // 如果存在vnode.data.hook.init钩子存在，说明该vnode是组件的vnode，调用init钩子，创建组件实例并挂载到vnode.componentInstance。如果传入的vnode不是组件的vnode，则不会存在init钩子，也不会创建组件的实例，函数最后返回undefined
+      if (isDef(i = i.hook) && isDef(i = i.init)) i(vnode, false)
+      // 如果vnode的组件实例已经创建过，调用initComponent初始化组件实例，设置vnode.elm，调用insert将vnode.elm插入到父DOM节点下，refElm之前
+      if (isDef(vnode.componentInstance)) { 
+        initComponent(vnode, insertedVnodeQueue)
+        insert(parentElm, vnode.elm, refElm)
+        if (isTrue(isReactivated))  // 如果是keepAlive组件
+          reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
+        return true
       }
     }
-    // 创建了组件实例之后，进行初始化组件实例
+    // 创建了组件实例之后，初始化组件实例
     function initComponent (vnode, insertedVnodeQueue) {
       if (isDef(vnode.data.pendingInsert)) {//子组件在创建过程中新增的所有节点加入到insertedVnodeQueue中
         insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert)
         vnode.data.pendingInsert = null;
       }
-      vnode.elm = vnode.componentInstance.$el //获取组件实例的DOM根元素节点，赋给vnode.elm
+      // 获取组件实例的根DOM节点元素，赋给vnode.elm
+      vnode.elm = vnode.componentInstance.$el 
       if (isPatchable(vnode)) {//组件可patch
         invokeCreateHooks(vnode, insertedVnodeQueue)//调用create钩子
         setScope(vnode); //设置scope
@@ -4204,15 +4202,14 @@
       insert(parentElm, vnode.elm, refElm);
     }
 
-    function insert (parent, elm, ref$$1) {
-      if (isDef(parent)) {
-        if (isDef(ref$$1)) {
-          if (nodeOps.parentNode(ref$$1) === parent) {
-            nodeOps.insertBefore(parent, elm, ref$$1);
-          }
-        } else {
-          nodeOps.appendChild(parent, elm);
+    function insert(parent, elm, ref$$1) {
+      if (!isDef(parent)) return // 如果没有定义插入的父节点，直接返回
+      if (isDef(ref$$1)) { // 如果定义了ref$$1，如果它的父节点和传入的parent全等，将elm节点插入到ref$$1节点的前面
+        if (nodeOps.parentNode(ref$$1) === parent) {
+          nodeOps.insertBefore(parent, elm, ref$$1);
         }
+      } else { // 如果没有定义ref$$1，将elm节点追加到父节点的子节点末尾
+        nodeOps.appendChild(parent, elm);
       }
     }
 
@@ -4226,12 +4223,13 @@
         nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(String(vnode.text)));
       }
     }
-    // 判断vnode是否是可patch的，如果组件的根DOM元素节点，则返回true
-    function isPatchable (vnode) {
-      while (vnode.componentInstance) { // vnode对应的组件实例存在，继续循环
-        vnode = vnode.componentInstance._vnode //当前组件实例的根vnode节点，覆盖vnode
-      } // 最后vnode是一开始传入的vnode的首个非组件节点对应的vnode
-      return isDef(vnode.tag) // 如果有tag值，说明传入的vnode是可patch的
+    // 一个vnode不管是普通节点的vnode还是组件的vnode，只要它存在根DOM元素节点，则它是可patch的
+    // 如果vnode对应的组件实例存在，则继续循环，获取当前vnode对应的组件实例的根vnode节点，覆盖vnode，如果vnode没有对应的组件实例，跳出循环，即最后的vnode是一开始传入的vnode的第一个非组件节点对应的vnode，如果这个vnode有tag，说明传入的vnode是可patch的
+    function isPatchable(vnode) {
+      while (vnode.componentInstance) {
+        vnode = vnode.componentInstance._vnode
+      }
+      return isDef(vnode.tag)
     }
     // 什么时候调用invokeCreateHooks呢？一个是在createElm调用的时候，一个是在initComponent调用时，调用会遍历cbs.create数组存放的钩子函数，依次调用updateDOMListeners
     function invokeCreateHooks (vnode, insertedVnodeQueue) {
@@ -4622,22 +4620,25 @@
 
     // 在浏览器环境，__patch__方法就是patch，patch内部会通过createElm去创建真实的DOM元素，期间遇到子vnode会递归调用createElm，递归调用过程中，判断该节点类型是否为组件占位vnode，通过createComponent方法判断，该函数和渲染vnode阶段的createComponent不同，它会调用子组件的init钩子函数进行初始化，并完成组件的DOM插入
     return function patch(oldVnode, vnode, hydrating, removeOnly) {
-      if (isUndef(vnode)) {//如果新vnode節點沒有定義，但舊的vnode節點有定義，則銷毀舊vnode節點並返回
+      // oldVnode接收旧的vnode节点或旧的真实DOM节点，vnode接收新的vnode节点
+      // 如果新的vnode节点没有定义，但旧的vnode有定义，则要调用invokeDestroyHook销毁旧vnode节点，并返回，如果新旧vnode都没有定义，直接返回
+      if (isUndef(vnode)) {
         if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
-        return // 如果新舊vnode都沒有定義，什麼都不做直接返回
+        return
       }
       var isInitialPatch = false; //是否是初次patch
       var insertedVnodeQueue = []; //insertedVnodeQueue队列
-      // 新的vnode节点存在，分两种情况：存在旧的vnode节点，不存在旧vnode节点
-      if (isUndef(oldVnode)) { // 如果不存在oldVnode，则创建新的根元素
-        isInitialPatch = true // 初次patch，属于空挂载
-        createElm(vnode, insertedVnodeQueue) //根据vnode创建新的DOM节点
-      } else { // 如果存在oldVnode，要判断oldVnode是否是真实的DOM元素
+      // 新的vnode节点存在，分两种情况：存在旧的vnode节点，不存在旧vnode节点。如果不存在oldVnode，说明属于初次patch，要调用createElm根据vnode创建新的DOM节点。
+      if (isUndef(oldVnode)) {
+        isInitialPatch = true
+        createElm(vnode, insertedVnodeQueue)
+      // 如果存在oldVnode，要判断oldVnode是否是真实的DOM元素，如果oldVnode不是真实DOM元素，且新旧vnode满足旧vnode可复用的条件，则比较新旧vnode节点，更新DOM，通过调用patchVnode实现。如果oldVnode是真实DOM元素，则生成对应的空vnode节点覆盖掉oldVnode這個真實DOM元素。
+      } else {
         var isRealElement = isDef(oldVnode.nodeType) // oldVnode是否是真实DOM元素
-        if (!isRealElement && sameVnode(oldVnode, vnode)) { // 如果oldVnode不是真实DOM元素，且新旧节点满足旧节点可复用的条件，则比较新旧节点，更新DOM。调用patchVnode实现，第三个参数是空数组
+        if (!isRealElement && sameVnode(oldVnode, vnode)) {
           patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly);
-        } else { // 新舊節點不滿足服用條件
-          if (isRealElement) { // oldVnode是真实DOM元素
+        } else { 
+          if (isRealElement) { 
             // 检查是否是服务端渲染，旧vnode的节点类型是元素节点，且
             if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
               oldVnode.removeAttribute(SSR_ATTR);
@@ -4652,43 +4653,28 @@
                 warn('The client-side rendered virtual DOM tree is not matching server-rendered content. This is likely caused by incorrect HTML markup, for example nesting block-level elements inside <p>, or missing <tbody>. Bailing hydration and performing full client-side render.');
               }
             }
-            // 如果不是服务端渲染，或者合并失败，则生成空的vnode节点覆盖oldVnode這個真實DOM元素
             oldVnode = emptyNodeAt(oldVnode)
           }
-          /**
-            1 没有新旧vnode
-              直接返回
-            2 有旧vnode 没有新vnode
-              销毁旧vnode 再返回
-            3 有新vnode
-              3.1 有新vnode 没有旧vnode
-                调用createElm 根据新的vnode创建新的DOM节点
-              3.2 有新vnode 有oldVnode
-                3.2.1 oldVnode不是真实DOM元素，而且是可複用的vnode
-                  调用patchVnode比较新旧vnode 更新DOM
-                3.2.2 oldVnode不是可複用的vnode
-                  调用createElm 根據新的vnode創建新的DOM節點
-                  3.2.2.1 oldVnode是真实DOM元素(必然不能作為vnode被複用)
-                    生成空vnode节点覆盖oldVnode這個真實DOM元素
-           */
-          var oldElm = oldVnode.elm// oldElm指向旧vnode对应的原生DOM节点
-          var parentElm = nodeOps.parentNode(oldElm) // parentElm指向oldElm的父节点
-          // 根据新的vnode创建新的原生DOM元素，并且插入到DOM树中
-          createElm( // 它的具体实现待会再仔细看
+          // oldVnode不是真实DOM节点，且新旧vnode不是同一节点，即旧vnode不能复用，获取旧vnode对应的原生DOM节点，再获取它的父DOM节点。然后根据新的vnode创建新的原生DOM节点，并插入到DOM树中
+          var oldElm = oldVnode.elm
+          var parentElm = nodeOps.parentNode(oldElm)
+          createElm(
             vnode,
             insertedVnodeQueue,
             oldElm._leaveCb ? null : parentElm,
             nodeOps.nextSibling(oldElm)
           );
-          // 现在新的DOM节点被创建出来了，递归地更新父级占位符节点元素
-          if (isDef(vnode.parent)) { // 如果新vnode节点有父级
+          // 现在新的DOM节点被创建出来了，如果新vnode节点有父级，则递归地更新父级占位符节点元素
+          if (isDef(vnode.parent)) {
             var ancestor = vnode.parent;
             var patchable = isPatchable(vnode);
-            while (ancestor) { // 向上遍历父级vnode
-              for (var i = 0; i < cbs.destroy.length; ++i) { //调用父vnode的各个模块的destroy钩子
+            // 获取vnode的父vnode，patchable代表vnode是否patch，即它是否有根DOM节点，首先向上遍历父级vnode，调用父vnode的各个模块的destroy钩子，将父vnode销毁
+            while (ancestor) {
+              for (var i = 0; i < cbs.destroy.length; ++i) {
                 cbs.destroy[i](ancestor)
               }
-              ancestor.elm = vnode.elm; //父vnode的DOM节点设为新vnode的DOM节点
+              // 父vnode的DOM节点设为新vnode的DOM节点，如果新vnode是可patch的，
+              ancestor.elm = vnode.elm
               if (patchable) {
                 for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
                   cbs.create[i$1](emptyNode, ancestor);
@@ -4699,17 +4685,17 @@
                     insert.fns[i$2]();
                   }
                 }
-              } else {
+              } else { //新vnode是不可patch的
                 registerRef(ancestor);
               }
               ancestor = ancestor.parent;
             }
           }
-          // 销毁旧节点，如果旧vnode的父DOM节点存在，则从父节点移除旧节点
+          // 销毁旧节点，如果旧vnode的父DOM节点存在，则从父DOM节点移除旧节点，如果旧vnode的父DOM节点不存在，且旧vnode有tag属性，说明它是元素节点，则销毁旧节点
           if (isDef(parentElm)) {
-            removeVnodes(parentElm, [oldVnode], 0, 0); // 
-          } else if (isDef(oldVnode.tag)) { //旧的vnode的父节点不存在，且旧vnode有tag属性
-            invokeDestroyHook(oldVnode); //有tag意味着它是元素节点，则销毁旧节点
+            removeVnodes(parentElm, [oldVnode], 0, 0)
+          } else if (isDef(oldVnode.tag)) {
+            invokeDestroyHook(oldVnode)
           }
         }
       }
@@ -6627,7 +6613,7 @@
     const updateComponent = () => {
       vm._update(vm._render(), hydrating)
     }
-    // 然后定义updateComponent函数，它是要被观察的函数，内部调用vm._render()执行vm.$options.render渲染函数，生成一份最新的vnode树，接着执行vm._update，比对新旧vnode树，把生成的vnode树渲染成真实DOM，其核心就是vm.__patch__，总之updateComponent做的是渲染操作。
+    // 然后定义updateComponent函数，它是要被观察的函数，内部调用vm._render执行vm.$options.render渲染函数，生成一份最新的vnode树，接着执行vm._update，比对新旧vnode树，把生成的vnode树渲染成真实DOM，其核心就是vm.__patch__，总之updateComponent做的是渲染操作。
     // 挂载是持续性的，不是渲染一次就完事，渲染之后每次数据发生变化都会进行重新渲染，这是通过为updateComponent创建watcher实现的。new Watcher会对updateComponent函数求值，它的执行会间接执行渲染函数，从而触发数据属性的getter，将该渲染函数的watcher收集到dep，即渲染函数中依赖的所有数据都会被该watcher观察，当数据变化时，将重新对updateComponent函数求值，从而重新渲染
     new Watcher(vm, updateComponent, noop, { //第三个参数是cb
       before() {
@@ -7440,7 +7426,7 @@
     el.refInFor = checkInFor(el); //添加refInFor属性，真假代表着当前元素的ref属性是否在v-for之内
   }
 
-  // 处理v-for指令，首先获取v-for的属性值，存在则调用parseFor函数解析v-for的属性值，如果解析结果res存在({for:'list', alias:'item', iterator1:'key', iterator2:'index'})，将res对象中的属性拷贝到当前元素ast对象中，如果res不存在，即解析v-for属性值失败，报警提示
+  // 处理v-for指令，如果存在v-for的属性值，则调用parseFor函数解析它，如果解析结果res存在({for:'list', alias:'item', iterator1:'key', iterator2:'index'})，将res对象中的属性拷贝到当前元素ast对象中，如果res不存在，即解析v-for属性值失败，报警提示
   function processFor (el) {
     var exp
     if (exp = getAndRemoveAttr(el, 'v-for')) {

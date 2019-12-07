@@ -246,9 +246,7 @@
 
   var devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
   const isNative = F => typeof F === 'function' && /native code/.test(F.toString())
-  var hasSymbol =
-    typeof Symbol !== 'undefined' && isNative(Symbol) &&
-    typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
+  var hasSymbol = typeof Symbol !== 'undefined' && isNative(Symbol) && typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
   var warn = noop;
   var tip = noop;
   var generateComponentTrace = (noop); // work around flow check
@@ -371,8 +369,9 @@
     Dep.target = targetStack[targetStack.length - 1] //Dep.target继续指向targetStack的栈顶
   }
 
-  // 页面初始化的所有状态都准备好后，下一步就是生成组件相应的VNode。第一次进行组件初始化时，VNode也会执行一次初始化并存储这时创建好的VNode对象。在随后的生命周期中，组件内的数据发生变动，会先生成新的VNode对象，再根据与之前存储的旧VNode的对比，来执行刷新页面DOM的操作。
-  // 定义VNode类自身，再定义一些常用的节点创建方法，包括创建空的注释节点，文字节点和新的克隆节点。vnode本身是一个包含了所有渲染所需信息的载体，不仅有相应的DOM标签和属性信息，还包含了子vnode列表，所以一个组件初始化之后得到的VNode是一棵vnode树，实质是抽象和信息化了的对应于DOM树的JS对象。watcher实现对数据变动的观察，在收到变动的通知后处理权就交给了渲染系统，渲染系统首先进行：根据变动生成新vnode，然后对比新旧vnode，最终确定一个建立真实DOM所需依赖的抽象对象
+  // 虚拟DOM是解决频繁操作DOM而引发性能问题的产物，它将页面的状态抽象为JS对象，本质上是JS和真实DOM的中间层，当我们想用JS大批量进行DOM操作时，会优先对vnode这个JS对象进行操作，最后通过比对要改动的部分，通知并更新真实DOM，虽然最后还是操作了真实DOM，但将多次改动合并为一次操作，减少了DOM的重排次数，缩短了生成渲染树和绘制的时间
+  // 浏览器将真实DOM设计得很复杂，不仅包含自身属性的描述，大小位置等定义，也包括DOM所有的浏览器事件等，如此复杂的结构，我们频繁去操作DOM会带来浏览器的性能问题，vnode作为数据和真实DOM之间的一层缓存，只是用来映射到真实DOM的渲染，因此不需要包含操作DOM的方法
+  // VNode实例是一个包含所有渲染所需信息的载体，比如标签名、数据、子节点等信息，并没有保留跟浏览器相关的DOM API。组件初始化之后得到的VNode是一个抽象的信息化的对应于DOM树的JS对象，已经比真实DOM对象描述的内容要简单很多，vnode还有其他的属性来扩展灵活性。
   class VNode {
     constructor(tag, data, children, text, elm, context, componentOptions, asyncFactory) {
       this.tag = tag; // 节点的标签名
@@ -1535,62 +1534,65 @@
     }
     return false
   }
-
+  // 针对内部编译的渲染函数，_c函数接收的children规范化，鉴于它已经是数组了，直接遍历，如果遇到嵌套数组，调用this指向[]的concat，chilren数组作为提供的参数数组，利用[].concat(1)为[1]，[].concat([1,2])为[1,2]的特点，children数组里的每项都作为concat的参数，遇到二维数组就将它展平了
   function simpleNormalizeChildren (children) {
-    for (var i = 0; i < children.length; i++) {
-      if (Array.isArray(children[i])) {
-        return Array.prototype.concat.apply([], children)
-      }
+    for (var i = 0; i < children.length; i++) { 
+      if (Array.isArray(children[i])) return Array.prototype.concat.apply([], children)
     }
     return children
   }
 
-  function normalizeChildren (children) {
+  // 这里判断children是否为基本类型值，如果是，直接基于它创建一个文本vnode节点，并放入一个数组返回，如果不是，再判断是否是数组，如果是则规范化数组形式的children，如果不是直接返回undefined
+  function normalizeChildren(children) {
     return isPrimitive(children)
       ? [createTextVNode(children)]
       : Array.isArray(children)
         ? normalizeArrayChildren(children)
         : undefined
   }
+  const isTextNode = node => isDef(node) && isDef(node.text) && isFalse(node.isComment)
 
-  function isTextNode (node) {
-    return isDef(node) && isDef(node.text) && isFalse(node.isComment)
-  }
-
+  // 函数做的事情是将创建的vnode的createElement函数的第三个参数，children数组遍历展平，不断往res数组里推入vnode，只要嵌套的是数组类型就往下递归遍历，直到是文本vnode节点，然后进行createTextVNode创建新的文本vnode节点。这样一层层从最深处构建出一个深层次的vnode
   function normalizeArrayChildren (children, nestedIndex) {
     var res = [];
     var i, c, lastIndex, last;
-    for (i = 0; i < children.length; i++) {
-      c = children[i];
+    for (i = 0; i < children.length; i++) { //遍历createElement传入的children数组
+      c = children[i]; // c是当前遍历项
+      // 如果当前项没有定义，或是一个boolean值，跳出本次循环
       if (isUndef(c) || typeof c === 'boolean') { continue }
-      lastIndex = res.length - 1;
-      last = res[lastIndex];
-      if (Array.isArray(c)) {
+      lastIndex = res.length - 1; //lastIndex是res数组末尾的索引
+      last = res[lastIndex]; // last指向res数组末尾项
+      if (Array.isArray(c)) { // 如果当前项是嵌套数组
+        // 当前嵌套数组不是空数组，递归调用normalizeArrayChildren处理当前项，并传入第二个参数nestedIndex，当前是第一层嵌套，所以nestedIndex没传，所以(nestedIndex || '') + "_" + i为''+"_" + i，即'_i'，i为当前遍历的索引，所以normalizeArrayChildren第二个参数接收的是_1、_1_2这样的字符串，既有嵌套数组的索引信息，也有嵌套层次的信息。
         if (c.length > 0) {
-          c = normalizeArrayChildren(c, ((nestedIndex || '') + "_" + i));
+          c = normalizeArrayChildren(c, (nestedIndex || '') + "_" + i);
+          // 如果嵌套数组项的第一项为文本vnode节点，且res数组末尾项也是文本vnode节点，将后者的文本和前者的文本合并，基于合并的文本字符串创建一个新的文本vnode节点，覆盖res的末尾项，然后再把当前嵌套数组项的首项弹出。
           if (isTextNode(c[0]) && isTextNode(last)) {
             res[lastIndex] = createTextVNode(last.text + (c[0]).text);
             c.shift();
           }
+          // 将当前项(数组)剩下的元素都推入res数组中
           res.push.apply(res, c);
         }
       } else if (isPrimitive(c)) {
+        // 如果当前遍历的项c不是数组，是基本类型值，判断res数组的末尾项是否是文本vnode节点，如果是，将它和c合并成一个文本字符串，然后基于它再创建一个新的文本vnode节点，再覆盖到res的末尾项。如果res的末尾项不是文本vnode节点，且当前遍历项c不是空字符串，为c创建文本vnode节点，推入res数组的末尾
         if (isTextNode(last)) {
           res[lastIndex] = createTextVNode(last.text + c);
         } else if (c !== '') {
           res.push(createTextVNode(c));
         }
-      } else {
+      } else { //当前遍历的项c既不是数组，也不是基本类型值，如果c是文本vnode节点，且res数组末尾项也是文本vnode节点，将它们俩的文本合并，创建一个新的vnode文本节点，覆盖到res数组的末尾项
         if (isTextNode(c) && isTextNode(last)) {
           res[lastIndex] = createTextVNode(last.text + c.text);
-        } else {
+        } else { //如果children是经历了v-for渲染转化成vnode的数组，且当前项c这个vnode对象存在tag值，且不存在key值，且存在nestedIndex(说明当前遍历的不是外层，而是嵌套的数组)，满足这些条件则让当前遍历项c增加一个key属性，值为 类似："__vlist_2_1__"，即为二层以下的嵌套vnode增加key值，因为用户并不能手动给嵌套的每一项添加key值。
           if (isTrue(children._isVList) &&
             isDef(c.tag) &&
             isUndef(c.key) &&
             isDef(nestedIndex)) {
             c.key = "__vlist" + nestedIndex + "_" + i + "__";
           }
-          res.push(c);
+          // 添加了key值的当前遍历项c，推入到res数组的末尾
+          res.push(c)
         }
       }
     }
@@ -1754,20 +1756,24 @@
   function proxyNormalSlot(slots, key) {
     return function () { return slots[key]; }
   }
-
-  function renderList(val, render) {
+  // renderList做的就是将v-for遍历的目标，进行遍历，逐个转成对应的vnode节点，放入一个新的数组ret，然后返回ret
+  function renderList(val, render) { //val接收v-for中被遍历的对象，比如什么list数组，或者xxx对象，或者一个字面量数组，也可以是一个数字类型，字符串类型，甚至可以是可迭代的对象比如原生的 Map 和 Set
     var ret, i, l, keys, key;
+    // 如果val是数组或字符串，按val的长度创建一个新的数组，然后遍历val，逐个调用传入的渲染函数，生成相应的vnode节点，赋给ret[i]，这样ret数组就有了val每一项对应的vnode
     if (Array.isArray(val) || typeof val === 'string') {
       ret = new Array(val.length);
       for (i = 0, l = val.length; i < l; i++) {
         ret[i] = render(val[i], i);
       }
+    // 如果val是number类型，比如3，则创建一个长度为3的空数组ret，然后进行3次循环，调用渲染函数，分别传入1,2,3和对应的索引0,1,2，生成相应的vnode节点，再一个个放到数组ret中
     } else if (typeof val === 'number') {
       ret = new Array(val);
       for (i = 0; i < val; i++) {
         ret[i] = render(i + 1, i);
       }
+    // 如果val是对象，分两种情况，一种是传统的对象，一种是可迭代的Map、Set对象
     } else if (isObject(val)) {
+      // 如果运行环境中symbol可用。。暂时不看这个
       if (hasSymbol && val[Symbol.iterator]) {
         ret = [];
         var iterator = val[Symbol.iterator]();
@@ -1776,7 +1782,7 @@
           ret.push(render(result.value, ret.length));
           result = iterator.next();
         }
-      } else {
+      } else {//val是普通对象，获取它所有自身属性组成的数组，赋给keys，按keys的长度创建一个空数组ret，遍历keys数组，根据每一项，即val中的属性名，获取到对应的属性值，传入渲染函数执行，返回出vnode节点赋给ret[i]，这样ret就有了val每个属性和属性值对应的vnode
         keys = Object.keys(val);
         ret = new Array(keys.length);
         for (i = 0, l = keys.length; i < l; i++) {
@@ -1785,11 +1791,12 @@
         }
       }
     }
+    // 这样下来，如果ret没有定义，说明v-for遍历的目标不合要求，返回空数组ret
     if (!isDef(ret)) {
       ret = [];
     }
-    (ret)._isVList = true;
-    return ret
+    (ret)._isVList = true; //给数组ret加上_isVList属性，标识已经经历了vnode的转化了
+    return ret // 返回出经过了遍历的存放了vnode的数组ret
   }
 
   function renderSlot(name, fallback, props, bindObject) {
@@ -2241,41 +2248,45 @@
   }
 
   var SIMPLE_NORMALIZE = 1;
-  var ALWAYS_NORMALIZE = 2;
-  // createElement返回VNode对象，vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
+  var ALWAYS_NORMALIZE = 2
+
+  // createElement返回vnode，实际它是对_createElement函数的封装，在调用_createElement之前，对传入的参数进行处理，毕竟手写的渲染函数参数需要统一化
   function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
-    // tag是元素标签名/组件名，data是当前vnode属性配置对象，children是子节点数组
-    if (Array.isArray(data) || isPrimitive(data)) {//如果data是个数组或基本类型值
+    // 如果第三个参数传的是数组或基本类型值，则默认没有传data，因为data一般是对象形式存在，则将第三个参数作为第四个参数使用，往上类推。
+    if (Array.isArray(data) || isPrimitive(data)) {
       normalizationType = children;
-      children = data; // 修正children
-      data = undefined; // 修正data为undefined
+      children = data;
+      data = undefined;
     }
     if (isTrue(alwaysNormalize)) normalizationType = ALWAYS_NORMALIZE;
+    // alwaysNormalize为false代表是内部编译生成render用到该函数，为true代表是手写render用到该函数
     return _createElement(context, tag, data, children, normalizationType)
   }
-  // createElement做了参数的归一化处理后，真正调用_createElement创建vnode节点
+
+  // _createElement创建vnode节点。vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
   function _createElement(context, tag, data, children, normalizationType) {
-    // 传入的data不能是被观测过的，否则报警，函数返回一个空vnode节点 
+    // Vue可以让用户手写渲染函数，就要考虑到不确定的传参，因此_createElement在创建vnode前会先做规范性检测
     if (isDef(data) && isDef((data).__ob__)) {
-      warn(`不能使用被观测的data作为vnode的data：${JSON.stringify(data)}\n 因为data在vnode渲染的过程中可能会被改变，这样会触发依赖，导致不符合预期的操作` + '，Always create fresh vnode data objects in each render!', context);
+      warn(`不能使用响应式对象作为vnode的data：${JSON.stringify(data)}\n 因为data在vnode渲染的过程中可能会被改变，这样会触发依赖，导致不符合预期的操作，Always create fresh vnode data objects in each render!`, context)
       return createEmptyVNode() // 返回一个空vnode节点
     }
     // 如果is属性存在，将is属性值赋给标签名tag
     if (isDef(data) && isDef(data.is)) tag = data.is
     if (!tag) return createEmptyVNode()
     // 如果tag没传，或is属性被赋予一个假值，将不知道这个组件要渲染成什么，所以返回一个空vnode节点
-    // 如果key存在，但key值不是基本类型值，警告，必须是字符串或数字，不能是引用值
+    // 如果data.key存在，但key值不是基本类型值，警告，必须是字符串或数字，不能是引用值
     if (isDef(data) && isDef(data.key) && !isPrimitive(data.key)) {
       warn('节点的key值必须是字符串/数字，不要使用引用类型值', context);
     }
+    // vnode树是每个vnode以树状形式拼成的，生成真实DOM需要一个完整的vnode树，因此要保证每个子节点都是vnode类型
     if (Array.isArray(children) && typeof children[0] === 'function') {
       data = data || {};
       data.scopedSlots = { default: children[0] };
       children.length = 0;
     }
-    if (normalizationType === ALWAYS_NORMALIZE) {
+    if (normalizationType === ALWAYS_NORMALIZE) { //是用户编写的渲染函数，分为两种情况，1当chidren为文本节点时，调用createTextVNode创建一个文本VNode节点，2当children中有v-for时出现的嵌套数组，遍历children，对每个节点进行判断，如果依旧是数组，递归调用，直到类型为基本类型值，创建文本vnode节点，经过递归后，children也变成全是vnode的数组
       children = normalizeChildren(children);
-    } else if (normalizationType === SIMPLE_NORMALIZE) {
+    } else if (normalizationType === SIMPLE_NORMALIZE) { //内部编译模板生成的渲染函数，理论上children数组都是vnode类型的项，但有例外，函数式组件返回一个数组，所以要将嵌套数组展平成一维数组
       children = simpleNormalizeChildren(children);
     }
     var vnode, ns;
@@ -2344,8 +2355,7 @@
     vm.$scopedSlots = emptyObject; // 初始化$scopedSlots属性为空对象
     // 上面这几行代码是有关Vue解析并处理slot的
 
-    // 在Vue实例上添加了两个方法_c和$createElement，这两个方法是对createElement函数的包装。我们配置render选项时，render:h=>h('h2','xxx')，渲染函数的第一个参数h接收的就是createElement函数，用来创建vnode节点。也可以这么写: render:()=>this.$createElement('h2','xxx')，完全等价的。
-    // _c函数用于编译器根据模板字符串生成的渲染函数的。vm._c和vm.$createElement的不同在于第六个参数不同，原因后面讲解。
+    // 在vm上添加了_c和$createElement方法，它们是对createElement函数的封装。vm._c是模板字符串被内部编译成渲染函数时调用的方法，vm.$createElement是手写渲染函数时可以调用的方法。用户在配置render选项时，render:h=>h('h2','xxx')，第一个参数接收createElement函数，用来创建vnode节点。也可以这么写: render:()=>this.$createElement('h2','xxx')，完全等价的。vm._c和vm.$createElement唯一区别是第六个参数alwaysNormalize不同，通过模板生成的渲染函数可以保证子节点都是vnode，手写的渲染函数需要一些校验和转换
     vm._c = (a, b, c, d) => createElement(vm, a, b, c, d, false)
     vm.$createElement = (a, b, c, d) => createElement(vm, a, b, c, d, true)
     var parentData = parentVnode && parentVnode.data;
@@ -2368,7 +2378,7 @@
     Vue.prototype.$nextTick = function (fn) {
       return nextTick(fn, this) // nextTick不止用在这，还用在nextTick(flushQueueWatcher)，这是将更新DOM的回调推入callbacks数组中。所以要想在$nextTick的fn中操作最新的DOM，就必须在修改数据之后调用$nextTick(fn)，这样callbacks数组中更新DOM的回调在fn之前，存在执行的先后。
     }
-    // _render是内部用来根据配置对象在内部生成vnode节点，作为传入_update的第一个参数。渲染函数本质是创建vnode树，即各种递归调用createElement函数，而createElment函数就是创建Vnode
+    // _render是调用渲染函数生成vnode节点，用户手写渲染函数时，接收的第一个参数是createElement函数。渲染函数本质是创建vnode树，即各种递归调用createElement函数，而createElment函数就是创建Vnode
     Vue.prototype._render = function () {
       var vm = this
       var render = vm.$options.render
@@ -2706,7 +2716,7 @@
 
   //lifecycleMixin函数执行，会给Vue原型添加_update、$forceUpdate、$destroy方法
   function lifecycleMixin(Vue) {
-    // _update方法把vnode渲染成真实DOM，是对vm.__patch__的封装，真正的创建/更新DOM树是由vm.__patch__方法完成。_update做了一些调用vm.__patch__前后的处理
+    // _update的核心是__patch__方法，将vnode渲染成真实DOM/更新DOM是靠它完成。调用vm.__patch__前后会做一些处理
     Vue.prototype._update = function (vnode, hydrating) {
       var vm = this
       // vm指向当前实例，当组件未挂载时，vm.$el指向挂载点元素，vm._vnode是实例的旧的根vnode节点，将当前vm赋给activeInstance，将传入的vnode赋给vm._vnode，更新vm的根vnode节点
@@ -3444,8 +3454,8 @@
           resolveConstructorOptions(vm.constructor), options || {}, vm
         )
       }
-      initProxy(vm); //指定渲染函数的执行上下文为代理的vm，通过拦截函数提供友好的开发提示
-      vm._self = vm; //注意vm._self和vm._renderProxy不同，用途不同，vm._renderProxy有可能是一个Proxy实例
+      initProxy(vm); //指定渲染函数的执行上下文为vm的proxy代理，通过拦截函数提供友好的开发提示
+      vm._self = vm; //vm._self和vm._renderProxy不同，proxy能用的话后者就是是vm的Proxy实例
       initLifecycle(vm); // 向实例挂载属性
       initEvents(vm); // 初始化事件
       initRender(vm); // 渲染的初始化
@@ -4026,7 +4036,7 @@
   当标签是<input>的时候，type必须相同
 */
 
-  // 真实DOM元素本身就被浏览器设计的很复杂庞大，当销毁一个DOM节点然后创建一个新节点再插入是消耗很大的，如果简单地将整个DOM结构用innerHTML修改到页面，这引起的重绘重排，一定产生性能问题。所以希望更新DOM时，尽可能复用现有的vnode进行更新，只更新修改了的地方。
+  // 组件的state发生变化，重新执行渲染函数生成新的vnode，然后比对新旧vnode，想要以最小的代价更新原有视图，在patch的过程中，如果两个VNode被认为是同一个VNode，则会进行深度的比较，得出最小差异，即希望更新DOM时，尽可能复用现有的vnode，只更新修改了的地方。
   function sameVnode(a, b) {
     // key属性是v-for自动添加的或自定义的:key属性，key属性如果没有设置，默认为undefined，当v-for渲染列表时会给节点一个唯一的key，两个vnode相同就必须它们的key相同，key不一样的vnode不能复用
     // 相同的vnode必须标签名一样，且不能是一个为注释节点一个不是注释节点，不能是一个有属性一个没有任何属性(没必要复用，还不如直接渲染新的)，如果是input元素还要type属性相同，如果不同就相当于不同的元素了
@@ -4059,7 +4069,7 @@
     return map
   }
 
-  // 内部定义了很多辅助方法，最终返回patch函数，它会赋给__patch__。函数接收的是{nodeOps,modules}，nodeOps是关于DOM操作的方法集合。patch是平台相关的，在web和weex环境把虚拟DOM映射为平台的真实DOM的方法是不同的，并且对DOM包含的属性模块和更新也不同，因此每个平台都有各自的nodeOps,modules
+  // createPatchFunction内部定义了很多辅助方法，最终返回patch函数，它会赋给__patch__。通过调用封装好的DOM的API，根据vnode树生成真实DOM节点，如果遇到组件的vnode时，会递归调用子组件的挂载过程
   function createPatchFunction({ nodeOps, modules }) {
     var i, j;
     var cbs = {};
@@ -4111,9 +4121,8 @@
     }
 
     var creatingElmInVPre = 0;
-
     // 根组件是用户new Vue创建的实例，除了根组件实例之外的组件实例都称为子组件实例，而子组件都是在根组件調用__patch__的过程中创建，所以一般所說的組件都是子組件
-    // createElm函数創建vnode節點的vnode.elm，即vnode對應的真實DOM節點，并插入到真实DOM树中。對於組件佔位vnode來說，會調用createComponent來創建vnode的組件實例，對於非組件佔位的vnode來說，會創建對應的DOM節點。
+    // createElm函数創建vnode對應的真實DOM節點，并插入到真实DOM树中。對於組件佔位vnode來說，會調用createComponent來創建vnode的組件實例，對於非組件佔位的vnode來說，會創建對應的DOM節點。
     function createElm(vnode, insertedVnodeQueue, parentElm, refElm, nested, ownerArray, index) {
       // 如果vnode.elm存在，即该vnode已经有对应的真实DOM节点，在以前的渲染中使用过，现在它被用作一个新vnode，当它作为插入节点时，会导致潜在的patch错误，所以将vnode克隆一份，赋给ownerArray[index]和vnode
       if (isDef(vnode.elm) && isDef(ownerArray)) vnode = ownerArray[index] = cloneVNode(vnode)
@@ -6159,14 +6168,12 @@
 
   var modules = platformModules.concat(baseModules);
 
-  var patch = createPatchFunction({ nodeOps, modules }); // patch函数是createPatchFunction函数的执行结果
+  var patch = createPatchFunction({ nodeOps, modules })// patch函数是createPatchFunction函数的返回值，nodeOps封装了一系列操作原生DOM对象的方法，modules定义了模块的钩子函数
 
   if (isIE9) {
     document.addEventListener('selectionchange', function () {
       var el = document.activeElement;
-      if (el && el.vmodel) {
-        trigger(el, 'input');
-      }
+      if (el && el.vmodel) trigger(el, 'input')
     });
   }
 
@@ -6231,20 +6238,15 @@
       option = el.options[i];
       if (isMultiple) {
         selected = looseIndexOf(value, getValue(option)) > -1;
-        if (option.selected !== selected) {
-          option.selected = selected;
-        }
+        if (option.selected !== selected) option.selected = selected;
       } else {
         if (looseEqual(getValue(option), value)) {
-          if (el.selectedIndex !== i) {
-            el.selectedIndex = i;
-          }
+          if (el.selectedIndex !== i) el.selectedIndex = i
           return
         }
       }
     }
-    if (!isMultiple)
-      el.selectedIndex = -1;
+    if (!isMultiple) el.selectedIndex = -1;
   }
 
   function hasNoMatchingOption (value, options) {
@@ -6271,11 +6273,7 @@
     el.dispatchEvent(e);
   }
 
-  function locateNode(vnode) {
-    return vnode.componentInstance && (!vnode.data || !vnode.data.transition) ?
-      locateNode(vnode.componentInstance._vnode) :
-      vnode
-  }
+  const locateNode = vnode => vnode.componentInstance && (!vnode.data || !vnode.data.transition) ? locateNode(vnode.componentInstance._vnode) : vnode
 
   var show = {
     bind (el, ref, vnode) {
@@ -6593,8 +6591,8 @@
     TransitionGroup
   })
 
-  // 如果运行在浏览器，Vue的原型方法__patch__是patch
-  Vue.prototype.__patch__ = inBrowser ? patch : noop;
+  // 如果运行在浏览器，__patch__是patch，如果是服务端渲染，因为没有DOM，__patch__是一个空函数
+  Vue.prototype.__patch__ = inBrowser ? patch : noop
 
   // 执行$mount最后都执行mountComponent，作用是将组件实例挂载到DOM元素上，其实就是将模版渲染到DOM节点中，并且以后当数据变化时，会重渲染到指定的DOM元素。
   function mountComponent (vm, el, hydrating) {
@@ -6629,11 +6627,11 @@
     }
     return vm
   }
-  // 这是runtime-only版的Vue的$mount函数，核心是执行mountComponent(真正的挂载)
+  // 这是运行时版的Vue的$mount函数，核心是执行mountComponent(真正的挂载)。当我们在选项中手写渲染函数去定义渲染过程，这时并不需要包含编译器的Vue即可完整执行。当我们利用webpack进行Vue的工程化开发时，会利用Vue-loader对vue文件进行编译，尽管我们也是在写模板字符串，但此时Vue已经不需要利用编译器去进行模板编译了，这个过程交给了插件去实现
   Vue.prototype.$mount = function (el, hydrating) {
     el = el && inBrowser ? query(el) : undefined
     return mountComponent(this, el, hydrating)
-  }
+  }// 编译的过程会带来性能的损耗，加入编译器的Vue的体积会增加3成，因此在实际开发中，需要借助webpack的vue-loader这类工具进行编译，即把Vue的模板编译阶段合并到webpack的构建流程中，减少了生产环境代码的体积，也提高了运行时的性能。
 
   if (inBrowser) {
     setTimeout(function () {
@@ -8298,7 +8296,8 @@
 
   // 根据ast对象中的for属性记录的v-for信息，生成对应的代码字符串
   function genFor(el, state, altGen, altHelper) {
-    var exp = el.for;
+    // 关于v-for的属性类似这样：for:'list', alias:'item', iterator1:'key', iterator2:'index'
+    var exp = el.for; // exp是被v-for的对象
     var alias = el.alias;
     var iterator1 = el.iterator1 ? ("," + (el.iterator1)) : '';
     var iterator2 = el.iterator2 ? ("," + (el.iterator2)) : '';
@@ -8312,8 +8311,8 @@
     }
 
     el.forProcessed = true; // avoid recursion
-    return `${altHelper || '_l'}((${exp}),` +
-    `function(${alias}${iterator1}${iterator2}){` +
+    return `${altHelper || '_l'}((${exp}),` + // _l即renderList，接收的exp是被遍历的对象
+      `function(${alias}${iterator1}${iterator2}){` + // _l还接收一个render函数
       `return ${(altGen || genElement)(el, state)}` +
     '})'
   }
@@ -8871,8 +8870,8 @@
   });
 
   const mount = Vue.prototype.$mount; // 先缓存一份不带编译器的$mount函数
-  // 完整版Vue的$mount函数，在运行时的$mount的基础上增加了编译模版的能力。Webpack的vue-loader会在构建时将Vue文件中的模版预编译成JS，因此最后打包好的Vue里不需要编译器的，用运行时版本Vue即可，因此生命周期中没有模版编译的阶段。
-  // 得到初始化的实例后，就开始组件的挂载，首先将render函数转为vnode，然后将vnode转为真实DOM插入到页面完成渲染，完成挂载后，会在当前组件实例this挂载$el属性，它就是完成挂载后对应的真实DOM
+
+  // 重新定义$mount函数，在运行时的$mount的基础上增加了模版编译，即为包含编译器和不包含编译器的版本提供不同的封装，最后调用的是缓存的$mount方法。得到初始化的实例后，就开始组件的挂载，如果没有传渲染函数，就将传入的模板经过编译器的解析，生成对应的渲染函数代码，如果传了渲染函数，则跳过了模板编译过程。调用vm._render将渲染函数转为vnode，然后通过vm._update执行将vnode转为真实DOM插入到页面完成渲染。
   Vue.prototype.$mount = function (el, hydrating) {
     // 如果传了el，就获取el对应的DOM节点，即组件挂载的占位节点
     el = el && query(el)
@@ -8916,7 +8915,6 @@
     // 前面做是获取合适的template字符串并编译成渲染函数，接着调用不含编译功能的$mount，进行真正的挂载
     return mount.call(this, el, hydrating)
   };
-
   // 获取描述一个DOM元素的（包括其后代）HTML字符串。注意IE9-11中SVG元素没有innerHTML和outerHTML属性，把SVG元素放到一个新建的DIV元素中，div元素的innerHTML就等价于SVG元素的outerHTML
   function getOuterHTML(el) {
     if (el.outerHTML) {

@@ -93,22 +93,22 @@
 
 
 // 在 processRawAttrs 函数内部首先定义了 l 常量，，接着使用一个 if 语句判断 l 是否为真，如果，此时会执行 if 语句块内的代码，在 if 语句块内首先定义了 attrs 常量，它与 el.attrs 属性有着相同的引用，初始值是长度为 l 的数组。接着使用 for 循环，并：
-
-
-let f = { a: 1 }
-
-let p = new Proxy(f, {
-  has(target, key) {
-    let has = key in f
-    if (has) {
-      console.log('在f或它原型链上');
-      
-    } else {
-      console.log('不在');
+function simpleNormalizeChildren(children) {
+  for (var i = 0; i < children.length; i++) { //已经是数组了，遍历数组
+    if (Array.isArray(children[i]))  { //如果元素还是数组，
+      console.log(Array.prototype.concat.apply([], children));
+      return Array.prototype.concat.apply([], children)
     }
-    return has
   }
-})
-  with (p) {
-  b=1
+  return children
 }
+
+console.log(
+
+new Array('9')
+
+
+);
+
+
+

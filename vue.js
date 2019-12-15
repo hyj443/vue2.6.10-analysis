@@ -2,26 +2,26 @@
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() : typeof define === 'function' && define.amd ? define(factory) : (global = global || self, global.Vue = factory());
 }(this, function () { 'use strict';
-  const emptyObject = Object.freeze({}); // 一个空的冻结对象：不可扩展，不可配置，不可写
+  const emptyObject = Object.freeze({}) // 一个空的冻结对象：不可扩展，不可配置，不可写
   const isUndef = v => v === undefined || v === null // 是否为未定义，null也认为是未定义
   const isDef = v => v !== undefined && v !== null // 是否有定义，null认为是未定义
   const isTrue = v => v === true
   const isFalse = v => v === false
   const isPrimitive = v => typeof v==='string'||typeof v==='number'||typeof v==='symbol'||typeof v ==='boolean'
-  const isObject = obj => obj !== null && typeof obj === 'object' // 快速对象检查，用于区分对象和原始值
+  const isObject = obj => obj !== null && typeof obj === 'object' // 用于区分对象和原始值
   const _toString = Object.prototype.toString;
   const toRawType = v => _toString.call(v).slice(8, -1) // 比如[object Object]的Object
-  const isPlainObject = obj => _toString.call(obj) === '[object Object]' // 严格的纯对象检查
+  const isPlainObject = obj => _toString.call(obj) === '[object Object]' //严格的纯对象检查
   const isRegExp = v => _toString.call(v) === '[object RegExp]' // 是否是正则对象
-  function isValidArrayIndex (val) { // 是否是有效的数组索引，满足：>=0; 整数; 有限数字
-    var n = parseFloat(String(val));
+  function isValidArrayIndex (val) { // 有效的数组索引满足：非负整数、有限数字
+    var n = parseFloat(String(val))
     return n >= 0 && Math.floor(n) === n && isFinite(val)
   }
   const isPromise = v => isDef(v) && typeof v.then === 'function' && typeof v.catch === 'function'
-  const toString = v => v == null ? // 值转字符串，如果值==null则转成''
-  '' : Array.isArray(v) || (isPlainObject(v) && v.toString === _toString) ? //如果是对象/数组
+  const toString = v => v == null ? '' : // 值转字符串，如果值==null则转成''
+    Array.isArray(v) || (isPlainObject(v) && v.toString === _toString) ? //如果是对象/数组
       JSON.stringify(v, null, 2) : String(v) //则调用JSON.stringify，否则直接调用String处理
-  // JSON.stringify将一个值转换为一个JSON字符串，接收三个参数，待转换的值(通常是数组/对象)；转换函数，如果传了函数则对象的每个属性都经过它的处理，如果传了一个数组，则只有包含在数组里的属性名才会被转化到最终的JSON字符串中，如果传null或没传，则对象的所有属性都会被转化，最后一个参数是缩进格数，美化输出
+  // JSON.stringify将一个值转换为一个JSON字符串，接收三个参数：待转换的值(通常是数组/对象)；转换函数，如果传了函数则对象的每个属性都经过它的处理，如果传了一个数组，则只有包含在数组里的属性名才会被转化到最终的JSON字符串中，如果传null或没传，则对象的所有属性都会被转化，最后一个参数是缩进格数，美化输出
   function toNumber(v) { // 转数字，转失败就返回原本值
     var n = parseFloat(v);
     return isNaN(n) ? v : n
@@ -37,7 +37,7 @@
       val => map[val]
   }
   var isBuiltInTag = makeMap('slot,component', true)// 函数检查是否是内置的标签名
-  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is')// 检查给定字符串是否是保留属性
+  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is')// 检查给定字符串是否是Vue内部的保留属性
   function remove(arr, item) { // 从数组中移除指定的元素，移除成功则返回被移除的项，否则无返回值
     if (arr.length) {
       var index = arr.indexOf(item);
@@ -95,9 +95,7 @@
   function toObject (arr) {
     var res = {};
     arr.forEach(item => {
-      if (item) {
-        extend(res, item)
-      }
+      if (item) extend(res, item)
     })
     return res
   }
@@ -2250,7 +2248,7 @@
   var SIMPLE_NORMALIZE = 1;
   var ALWAYS_NORMALIZE = 2
 
-  // createElement返回vnode，实际它是对_createElement函数的封装，在调用_createElement之前，对传入的参数进行处理，毕竟手写的渲染函数参数需要统一化
+  // createElement是对_createElement函数的封装，在调用_createElement之前，对传入的参数进行处理，毕竟手写的渲染函数参数需要统一化
   function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
     // 如果第三个参数传的是数组或基本类型值，则默认没有传data，因为data一般是对象形式存在，则将第三个参数作为第四个参数使用，往上类推。
     if (Array.isArray(data) || isPrimitive(data)) {
@@ -2265,7 +2263,7 @@
 
   // _createElement创建vnode节点。vnode包含的信息会告诉Vue页面需要渲染什么样的节点，包括子节点的描述信息。虚拟DOM是对由Vue组件树建立起来的整个VNode树的称呼
   function _createElement(context, tag, data, children, normalizationType) {
-    // Vue可以让用户手写渲染函数，就要考虑到不确定的传参，因此_createElement在创建vnode前会先做规范性检测
+    // Vue可以让用户手写渲染函数，传参是不确定的，因此要在创建vnode前会先做规范性检测
     if (isDef(data) && isDef((data).__ob__)) {
       warn(`不能使用响应式对象作为vnode的data：${JSON.stringify(data)}\n 因为data在vnode渲染的过程中可能会被改变，这样会触发依赖，导致不符合预期的操作，Always create fresh vnode data objects in each render!`, context)
       return createEmptyVNode() // 返回一个空vnode节点
@@ -2273,7 +2271,7 @@
     // 如果is属性存在，将is属性值赋给标签名tag
     if (isDef(data) && isDef(data.is)) tag = data.is
     if (!tag) return createEmptyVNode()
-    // 如果tag没传，或is属性被赋予一个假值，将不知道这个组件要渲染成什么，所以返回一个空vnode节点
+    // 如果tag没传，或is属性值是假值，将不知道这个组件要渲染成什么，所以返回一个空vnode节点
     // 如果data.key存在，但key值不是基本类型值，警告，必须是字符串或数字，不能是引用值
     if (isDef(data) && isDef(data.key) && !isPrimitive(data.key)) {
       warn('节点的key值必须是字符串/数字，不要使用引用类型值', context);
@@ -2298,7 +2296,7 @@
         vnode = new VNode(
           config.parsePlatformTagName(tag), data, children, undefined, undefined, context
         );
-      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { // 调用resolveAsset根据tag获取已注册的组件构造器，可能是局部组件，也可能是全局组件，如果有值，说明该占位符组件已经注册过，调用createComponent创建子组件vnode
+      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { // 调用resolveAsset根据tag获取已注册的组件构造器，可能是局部组件，也可能是全局组件，如果有值，说明该组件已经注册过，调用createComponent创建子组件vnode
         vnode = createComponent(Ctor, data, context, children, tag)
       } else {
         vnode = new VNode(tag, data, children, undefined, undefined, context);
@@ -2684,34 +2682,35 @@
 
   var activeInstance = null; // activeInstance指向当前正在渲染的实例
   var isUpdatingChildComponent = false;
-  // 将传入的vm赋给activeInstance，当前活跃的实例，返回一个函数，函数执行将activeInstance恢复为上一个活跃实例
+  // 将当前活跃的实例设置为传入的vm，返回一个函数，函数执行将活跃实例恢复为上一个活跃实例
   function setActiveInstance(vm) {
     var prevActiveInstance = activeInstance;
     activeInstance = vm;
-    return () => { activeInstance = prevActiveInstance }// 这里用了闭包
+    return () => { activeInstance = prevActiveInstance } // 闭包
   }
-
+  // initLifecycle主要用来初始化生命周期相关的属性，以及为$parent,$child属性赋值
   function initLifecycle (vm) {
     var options = vm.$options;
-    var parent = options.parent;// parent引用当前实例的父实例
-    if (parent && !options.abstract) { //如果父实例存在，且当前实例不是抽象的，则开启while循环，循环的条件是父组件是抽象的，且父组件也有自己的父组件，则将父组件的父组件实例赋给parent，也就是，不断向上查找，直到遇到不抽象的父组件或抽象的但没有父组件的父组件。将当前组件实例vm推入这个父组件的$children
+    var parent = options.parent // parent引用当前实例的父实例
+    //如果父实例存在，且当前实例不是抽象的，则开启while循环，循环的条件是父实例是抽象的，且父实例有自己的父实例，则将父实例的父实例赋给parent，即不断向上查找，直到遇到不抽象的父组件或抽象的但没有父组件的父组件为止。将当前组件实例vm推入这个父组件的$children数组
+    if (parent && !options.abstract) { 
       while (parent.$options.abstract && parent.$parent) { 
         parent = parent.$parent;
       }
       parent.$children.push(vm);
     }
-    // 如果options.abstract为真，说明当前实例是抽象的，不会执行if语句，直接设置vm.$parent和vm.$root。说明抽象实例不会被添加到父实例的$children中。如果abstract为假，说明当前实例不是抽象的，是一个普通的组件实例，因为抽象组件不能作为父级，开启while循环，目的是逐层向上寻找，找到第一个不抽象的实例作为父级，并将当前实例添加到父实例的$children属性中
+    //如果当前实例是抽象的，不会执行if语句，因此抽象实例不会被添加到父实例的$children中。如果当前实例不是抽象的，是一个普通的组件实例，开启while循环，逐层向上寻找，找到第一个不抽象的实例作为父级(抽象组件不能作为父级)，并将当前实例添加到父实例的$children属性中
     vm.$parent = parent;// 设置当前实例的$parent属性，指向父级
     vm.$root = parent ? parent.$root : vm; //如果没有父组件，根组件就是自己，如果有父组件，vm.$root就取父组件的$root。
     // 总结：将当前vm添加到父实例的$children属性里，并设置当前vm的$parent指向父实例
-    vm.$children = [];
-    vm.$refs = {} //一个实例的$refs对象，存放组件中所有使用了ref属性的{ref值:组件实例/DOM节点}
+    vm.$children = []; // 初始化$children为空数组
+    vm.$refs = {} //一个实例的$refs对象，存放组件中所有使用了ref属性的{ref值:组件实例/DOM元素对象}
     vm._watcher = null; // 记录vm实例的渲染函数的watcher
-    vm._inactive = null;
-    vm._directInactive = false;
-    vm._isMounted = false;
-    vm._isDestroyed = false;
-    vm._isBeingDestroyed = false;
+    vm._inactive = null; //表示keep-alive中组件状态，如被激活，该值为false,反之为true。
+    vm._directInactive = false; // 表示keep-alive中组件状态的属性
+    vm._isMounted = false; // 当前实例是否完成挂载
+    vm._isDestroyed = false; //当前实例是否已经被销毁
+    vm._isBeingDestroyed = false; // 当前实例是否正在被销毁, 还没有销毁完成
   }
 
   //lifecycleMixin函数执行，会给Vue原型添加_update、$forceUpdate、$destroy方法
@@ -2748,18 +2747,15 @@
       if (vm._isBeingDestroyed) return // 正在被销毁，直接返回，不重复销毁
       callHook(vm, 'beforeDestroy'); // 销毁前调用beforeDestroy钩子函数
       vm._isBeingDestroyed = true;
-      // 将自己从父组件的$children数组中删除
+      //如果父组件存在，且父组件没有正在被销毁，且当前不是抽象组件，将自己从父组件的$children数组中删除
       var parent = vm.$parent;
-      if (parent && !parent._isBeingDestroyed && !vm.$options.abstract) {
+      if (parent && !parent._isBeingDestroyed && !vm.$options.abstract)
         remove(parent.$children, vm);
-      }
-      // 实例的渲染函数的watcher，会被它依赖的数据属性的dep所收集，现在要从他们那删掉自己，不再需要通知这里重新渲染了
-      if (vm._watcher) {
-        vm._watcher.teardown();
-      }
-      // 用户可能自行$watch了一些状态，自定义的这些watcher也要销毁
-      var i = vm._watchers.length; //遍历组件的所有的watcher实例
-      while (i--) { // 逐个执行teardown方法，就能将watcher实例从它监听的状态的dep中移除
+      // 如果实例的渲染函数的watcher存在，因为它会被它依赖的数据属性的dep收集，现在要从他们那删掉自己，不再需要通知重新渲染了
+      if (vm._watcher) vm._watcher.teardown();
+      // 用户可能自定义了一些watcher，这些watcher也要销毁，遍历组件的所有watcher，逐个调用watcher的teardown方法，将watcher实例从它监听的数据的dep中移除
+      var i = vm._watchers.length
+      while (i--) {
         vm._watchers[i].teardown();
       }
       // remove reference from data ob
@@ -2767,14 +2763,12 @@
       if (vm._data.__ob__) {
         vm._data.__ob__.vmCount--;
       }
-      vm._isDestroyed = true; // 表明这个组件已经被销毁
-
-      vm.__patch__(vm._vnode, null); // 调用patch方法将空的vnode树渲染成真实的dom，vm._vnode代表旧的vnode，null代表新的vnode是null
-      
-      callHook(vm, 'destroyed');// 触发destroyed钩子
-     
+      vm._isDestroyed = true; // _isDestroyed表明这个组件已经被销毁
+      // 调用patch方法将空的vnode树渲染成真实的dom，vm._vnode是旧的vnode，新的vnode是null
+      vm.__patch__(vm._vnode, null); 
+      callHook(vm, 'destroyed');// 调用destroyed钩子
       vm.$off(); // 移除所有的实例上的事件监听器
-      if (vm.$el) { // 在vm._update执行时，即将虚拟vnode渲染成真实dom时，会给vm.$el添加__vue__属性，值为当前vm实例，现在要把它设为null
+      if (vm.$el) { //vm._update执行时，将虚拟vnode渲染成真实dom，会给vm.$el添加__vue__属性，值为当前vm实例，现在要把它设为null
         vm.$el.__vue__ = null; 
       }
       // 释放循环引用，这是为什么？ (#6759)
@@ -2877,7 +2871,6 @@
   }
 
   function callHook(vm, hook) { // 当前vm实例 和 生命周期函数名称
-    // #7573 disable dep collection when invoking lifecycle hooks
     pushTarget(); // 这是为什么？
     var handlers = vm.$options[hook]; // 获取钩子函数数组，注意 已经是数组了
     var info = hook + " hook";
@@ -2886,9 +2879,8 @@
         invokeWithErrorHandling(handler, vm, null, vm, info);
       })
     }
-    if (vm._hasHookEvent) { //当前组件注册有hookEvent，调用emit派发'hook:' + hook这个事件
-      vm.$emit('hook:' + hook);
-    }
+    if (vm._hasHookEvent) vm.$emit('hook:' + hook)
+    //当前组件注册有hookEvent，调用emit派发'hook:' + hook这个事件
     popTarget();
   }
 
@@ -3446,7 +3438,7 @@
     Vue.prototype._init = function (options) {
       var vm = this;
       vm._uid = uid$3++
-      vm._isVue = true; //标识是Vue实例而不是普通的对象，避免被观测 
+      vm._isVue = true // _isVue是Vue实例的标识，区别于普通的对象，避免被观测 
       if (options && options._isComponent) { //_isComponent表明是内部子组件
         initInternalComponent(vm, options) // 主要为vm.$options添加一些属性
       } else { //当前Vue实例不是组件，调用mergeOptions方法，将vm的构造器的options(合并了父级构造器的options)，和当前实例化时接收的options合并
@@ -3454,8 +3446,8 @@
           resolveConstructorOptions(vm.constructor), options || {}, vm
         )
       }
-      initProxy(vm); //指定渲染函数的执行上下文为vm的proxy代理，通过拦截函数提供友好的开发提示
-      vm._self = vm; //vm._self和vm._renderProxy不同，proxy能用的话后者就是是vm的Proxy实例
+      initProxy(vm) //指定渲染函数的执行上下文为 vm的proxy代理，通过拦截函数提供友好的开发提示
+      vm._self = vm; //vm._self指向当前vm实例自己
       initLifecycle(vm); // 向实例挂载属性
       initEvents(vm); // 初始化事件
       initRender(vm); // 渲染的初始化
@@ -3468,14 +3460,13 @@
       if (vm.$options.el) vm.$mount(vm.$options.el);
     };
   }
-  // 为创建的内部组件的options对象手动赋值，提升性能
+  // 为内部组件实例创建options对象(即opts)，初始化为一个以vm.constructor.options为原型的空对象，然后给这个对象手动添加属性，比动态枚举属性来添加更快，提升性能
   function initInternalComponent(vm, options) {
-    // 创建一个以vm.constructor.options为原型的空对象
     var opts = vm.$options = Object.create(vm.constructor.options);
-    // 以下为手动赋值，它比动态枚举属性来赋值来得快
-    var parentVnode = options._parentVnode // 获取父vnode节点
-    opts.parent = options.parent; // 父DOM节点
-    opts._parentVnode = parentVnode; // 给opts对象添加_parentVnode属性
+    // 首先获取父vnode节点。给opts添加parent和_parentVnode属性，属性值分别为父DOM节点和父vnode节点
+    var parentVnode = options._parentVnode
+    opts.parent = options.parent
+    opts._parentVnode = parentVnode;
     // 获取父vnode节点的componentOptions，给opts对象添加propsData等属性
     var vnodeComponentOptions = parentVnode.componentOptions;
     opts.propsData = vnodeComponentOptions.propsData;
@@ -3653,11 +3644,9 @@
       } // 所以注册指令、过滤器、组件，其实就是往Vue.options中对应的属性存值，将自定义指令对象、过滤器函数、组件构造器和它们对应的指令名、过滤器名、组件名以键值对存到对象中
     })
   }
-
-  function getComponentName (opts) {
-    return opts && (opts.Ctor.options.name || opts.tag)
-  }
-
+  // 接收组件配置对象opts，返回对应的组件名
+  const getComponentName = opts => opts && (opts.Ctor.options.name || opts.tag)
+  // keepAlive的prop接收的新值是pattern，name是当前要比对的组件名，如果它匹配当前prop接收的值，则返回true，代表该组件需要缓存，如果不匹配，返回false，代表组件不用缓存
   function matches (pattern, name) {
     if (Array.isArray(pattern)) {
       return pattern.indexOf(name) > -1
@@ -3668,17 +3657,19 @@
     }
     return false
   }
-
+  // pruneCache接收keepAlive实例，和一个匹配函数
   function pruneCache (keepAliveInstance, filter) {
     var cache = keepAliveInstance.cache;
     var keys = keepAliveInstance.keys;
     var _vnode = keepAliveInstance._vnode;
-    for (var key in cache) {
+    // 获取keepAlive实例所缓存的组件vnode对象cache，缓存的组件名，本身对应的vnode
+    for (var key in cache) { //遍历缓存的组件vnode对象
       var cachedNode = cache[key];
-      if (cachedNode) {
+      if (cachedNode) { //当前组件vnode存在，获取组件名
         var name = getComponentName(cachedNode.componentOptions);
-        if (name && !filter(name)) {
+        if (name && !filter(name)) { //如果组件名存在，但组件不是要缓存的
           pruneCacheEntry(cache, key, keys, _vnode);
+          // 将不需要缓存的组件销毁，并对cache和keys做相应的调整
         }
       }
     }
@@ -3692,28 +3683,27 @@
     cache[key] = null;
     remove(keys, key);
   }
-
   var patternTypes = [String, RegExp, Array]
-
+  //keep-alive包裹动态组件时，会缓存不活动的组件实例，而不是销毁它们
   var builtInComponents = {
-    KeepAlive: { //keep-alive不会重复渲染相同的组件，只会利用首次渲染保留的缓存结果去更新节点
+    KeepAlive: { // 不会重复渲染不活动的组件，只会利用首次渲染保留的缓存结果去更新节点
       name: 'keep-alive',
-      abstract: true, //指定该组件是抽象的，通过该组件创建的实例是抽象的，抽象组件的特点是不渲染真实DOM到页面的，但会提供一些有用的功能。并且抽象组件不会出现在父级关系的路径上
-      props: {
-        include: patternTypes,
-        exclude: patternTypes,
-        max: [String, Number]
+      abstract: true,//是抽象组件，不渲染真实DOM到页面的，也不会出现在父级关系的路径(父组件链)上
+      props: { //keep-alive组件允许使用props
+        include: patternTypes,//字符串或正则或数组，只有名称匹配的组件才会被缓存
+        exclude: patternTypes,//字符串或正则或数组，名称匹配的组件不会被缓存
+        max: [String, Number] //数字，最多可以缓存多少组件实例
       },
       created() {
-        this.cache = Object.create(null)
-        this.keys = []
+        this.cache = Object.create(null) // 缓存组件vnode
+        this.keys = [] // 缓存组件名
       },
-      destroyed() {
-        for (const key in this.cache) {
-          pruneCacheEntry(this.cache, key, this.keys)
+      destroyed() { // 遍历组件vnode的缓存对象，调用每个vnode对应的组件实例的$destroy，进行实例的销毁
+        for (const key in this.cache) { // this.cache对象的所有属性值置为null
+          pruneCacheEntry(this.cache, key, this.keys) // 将this.keys数组中vnode对应的key清除
         }
       },
-      mounted() {
+      mounted() {//组件挂载成功后，执行mounted钩子，创建两个watcher监听include和exclude两个prop接收的值的变化，当值变化时，执行回调函数
         this.$watch('include', val => {
           pruneCache(this, name => matches(val, name))
         })

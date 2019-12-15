@@ -95,3 +95,18 @@ fooContext={
 很显然回流比重绘更加耗费性能。
 
 通过了解浏览器基本的渲染机制，我们很容易联想到当不断的通过JS修改DOM时，不经意间会触发到渲染引擎的回流或者重绘，这个性能开销是非常巨大的。因此为了降低开销，我们需要做的是尽可能减少DOM操作。有什么方法可以做到呢？
+
+
+
+initMixin
+  _init
+    _isComponent
+    initInternalComponent
+
+    mergeOptions
+    resolveConstructorOptions
+    initLifecycle
+
+
+
+

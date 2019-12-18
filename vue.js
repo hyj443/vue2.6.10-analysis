@@ -517,107 +517,107 @@
     return ob // Observer实例或undefined
   }
 
-  // 观测一个纯对象，将对象的属性转为响应式属性，为属性的属性描述符添加get和set方法，当获取该响应式属性的值时，get函数被触发，进行依赖收集，当设置该响应式属性的值时，set方法被触发，通知依赖该属性的值变化了
+  // 观测一个对象，将对象的属性转为响应式属性，为属性的属性描述符添加get和set方法，当获取该响应式属性的值时，get函数被触发，进行依赖收集，当设置该响应式属性的值时，set方法被触发，通知依赖该属性的值变化了
   function defineReactive$$1(obj, key, val, customSetter, shallow) {
     var dep = new Dep();
-    // 函数内部定义一个dep变量，指向一个Dep实例。函数执行结束，函数的执行上下文已经被销毁了，即从执行上下文栈中被弹出了，定义在函数内部的key的get/set函数里引用了变量dep，即使外部函数的执行上下文被销毁，但JS仍然会让dep存留在内存中，即dep不会随着函数执行结束而销毁，每次调用get/set方法都能访问这个dep。被观测对象的每个响应式key，都唯一地对应一个dep实例
+    // 函数内部定义dep变量，指向一个Dep实例。函数执行结束，函数的执行上下文被销毁了，即从执行上下文栈中被弹出了，定义在函数内部的key的get/set函数里引用了变量dep，即使外部函数的执行上下文被销毁，但JS仍然会让dep存留在内存中，即dep不会随着函数执行结束而销毁，每次调用get/set方法都能访问这个dep。被观测对象的每个响应式key，都唯一地对应一个dep实例
     var property = Object.getOwnPropertyDescriptor(obj, key) //获取obj的自有属性key的属性描述符
     if (property && property.configurable === false) return
-    // 如果key的属性描述符存在且configurable为false，说明它的属性描述符不能重新定义，并且该key不能从对象中删除，说明使用Object.defineProperty去定义key的属性描述符是无效的，直接返回
+    // 如果key的属性描述符存在且configurable为false，说明它的属性描述符不能重新定义，并且该key不能从对象中删除，使用Object.defineProperty去定义key的属性描述符是无效的，直接返回
 
-    // key可能本身就有自己的get/set，我们先缓存一份给getter/setter，因为接下来会重新定义key的get/set，在重新定义的get/set函数中，调用缓存的getter/setter，就能不改变key的原本的读写操作
+    // key可能本身就有自己的get/set，我们先缓存起来，因为接下来会重新定义key的get/set，在重新定义的get/set函数中，调用缓存的getter/setter，就能不改变key原本的读写操作
     var getter = property && property.get;
     var setter = property && property.set;
-    if ((!getter || setter) && arguments.length === 2) { val = obj[key] }
-    // 求出val的目的是继续观测val。(!getter||setter)的相反情况是：key有getter没setter，是只读属性，val不会改变，没有深度观测val的必要，因此val为undefined
-    // 上面的if条件满足，val才会拿到值，不满足则val是undefined，observe(val)会直接返回，观测val无效
+    if ((!getter || setter) && arguments.length === 2) val = obj[key]
+    // 求出val的目的是继续观测val。(!getter||setter)的相反情况是：key有getter没setter，是只读属性，val不会改变，没有深度观测val的必要，因此val为undefined，observe(val)会直接返回，观测val无效
     var childOb = !shallow && observe(val); // shallow为真代表不深度观测
-    // 调用observe继续观测key的val，返回值赋给childOb，如果val是数组/对象，返回val.__ob__，Observer实例，如果val是别的类型，observe(val)直接返回，childOb是undefined
+    // 调用observe继续观测key的val，如果val是数组/对象，返回Observer实例赋给childOb，如果val是别的类型，函数返回undefined赋给childOb
     // 注意到，在key的get/set方法中，也引用着外层函数作用域中定义的childOb，产生了闭包，childOb随着函数执行完毕依然存留在内存中，相当于val拥有一个属于自己的childOb
-    Object.defineProperty(obj, key, { // 直接在对象中定义或修改属性
+    Object.defineProperty(obj, key, { // 直接在对象中定义或修改属性key
       enumerable: true,
       configurable: true,
       get() {
-        var value = getter ? getter.call(obj) : val //如果key本来就有get方法，直接执行它，返回值赋给value，这保证了key原来的读取操作正常，如果没有get方法，val赋给value，val可能是传入的val也可能是obj[key]
-        if (Dep.target) { // 如果存在当前正在计算的watcher(依赖)
-          dep.depend(); // 调用当前key的dep实例的depend方法，收集这个Dep.target
-          if (childOb) { // 如果childOb存在，即observe(val)返回的是Observer实例，说明key的val是对象/数组，也被观测了
-            // childOb === val.__ob__; childOb.dep === val.__ob__.dep
-            childOb.dep.depend(); // 调用val的Observer实例的dep的depend方法，不只是key的dep收集了当前依赖，为什么key的val.__ob__.dep也要收集依赖呢？即同一个依赖分别收集到两个不同的dep
-            // 我们知道修改key的val能触发key的依赖，如果val是对象/数组，也会被观测，修改val对象的属性或val数组元素调用数组变异方法，也能触发key的依赖，但给对象添加属性/数组添加元素，Object.defineProperty是检测不到这种val的变化，它只能拦截属性值的读取和修改，无法拦截给对象添加/删除属性的操作，我们希望这种改变val的方式也能触发key的依赖，于是有了Vue.set/$set方法，大致实现如下：
+        var value = getter ? getter.call(obj) : val //如果key本来就有get方法，执行的返回值赋给value，这保证了key原来的读取操作正常，如果没有get方法，val赋给value，val可能是传入的val也可能是obj[key]
+        if (Dep.target) { // 如果当前存在可收集的watcher，调用当前key的dep的depend方法
+          dep.depend(); // 收集这个Dep.target
+          if (childOb) { // 如果childOb存在，即val的Obsever实例存在，val是对象/数组，深度观测val成功
+            childOb.dep.depend();
+            // childOb.dep === val.__ob__.dep，调用depend方法收集依赖，为什么key的dep收集了当前依赖，key的val.__ob__.dep也要收集依赖，同一个依赖分别被两个dep收集。我们希望修改key的val能触发key的依赖，如果val是对象/数组，也会被观测，修改val对象的属性或val数组调用数组变异方法，也能触发key的依赖，但给对象添加/删除属性或数组添加元素，Object.defineProperty是检测不到这种val的变化，只能拦截属性值的读取和修改，无法拦截给对象添加/删除属性的操作，我们希望这种改变val的方式也能触发key的依赖，于是定义了Vue.set/$set方法，大致实现如下：
             /* Vue.set = function (target, key, val) {
                 defineReactive(target, key, val)
                 target.__ob__.dep.notify()
               } */ 
-            // 响应式属性key的val是对象/数组的话，val会被递归观测，因此给val添加的属性也要被观测，调用defineReactive去定义响应式的新属性。同时，我们希望Vue.set执行能触发key的dep中存放的依赖，但在Vue.set中引用不到到key的dep，因为传入函数的target已经是key的val了。没事，val它有__ob__属性，能引用到val.__ob__.dep实例，我们让它收集和key的dep所收集的一样的依赖，于是Vue.set执行时，target.__ob__.dep.notify()，触发的是和key的dep存的相同的依赖。
-            if (Array.isArray(value)) { // 当val是数组时，不止key的dep收集依赖，val.__ob__.dep收集依赖，还要让每个数组元素收集依赖
+            // 响应式属性key的val是对象/数组的话，val会被观测，因此给val添加的属性也要被观测，调用defineReactive去定义响应式的新属性。同时，我们希望Vue.set执行能触发key的dep中存放的依赖，但在Vue.set中引用不到到key的dep，因为传入函数的target已经是key的val了。但val有__ob__属性，能引用到val.__ob__.dep，我们让它收集和key的dep所收集的一样的依赖，于是Vue.set执行时，target.__ob__.dep.notify()，触发的是和key的dep存的相同的依赖。
+            if (Array.isArray(value)) { 
               dependArray(value) // 逐个调用元素的__ob__.dep的depend方法，收集依赖
             }
-            // 比如data中有属性arr，值为数组，第一项是一个对象，首先data.arr肯定被观测了，所以存在data.arr.__ob__，data.arr[0]也被观测了，存在data.arr[0].__ob__。现在模版里使用了arr，渲染函数执行将触发arr属性的get，data.arr的dep和data.arr.__ob__.dep都存了该依赖，但data.arr[0].__ob__.dep并没有收集有依赖。如果给arr[0]增加响应式属性，即this.$set(this.data.arr[0],'b',2)执行，是无法触发依赖的，但数组元素的变化也是数组本身的变化。为了让这种情况下也能触发响应，就必须让data.arr[0].__ob__.dep也收集同一份依赖，这就是dependArray的作用。
-            // 通过索引修改数组元素值是不能触发响应的，Vue通过拦截数组的变异方法，加入触发依赖的操作(依赖存在数组的__ob__的dep)，从而使通过调用变异方法改变数组能触发依赖。假如元素正好是对象，你直接通过arr[index]去修改对象，虽然arr[index]是响应式数据，但也是无法触发arr的依赖，只有通过$set给该元素对象添加/修改属性，利用data.arr[index].__ob__.dep.notify的调用。所以该dep要存一份和arr的dep存的一样的依赖。所以响应式key的val是数组时，不仅数组本身的dep要收集依赖，它的子元素也要递归收集依赖，这样的话，通过$set改变数组的元素就能触发arr的依赖。
+            // 当val是数组时，不止key的dep收集依赖、val.__ob__.dep收集依赖，还要让每个数组元素收集依赖
+            // 比如data中有属性arr，值为数组，第一项是一个对象。首先data.arr肯定被观测了，存在data.arr.__ob__，data.arr[0]也被观测了，存在data.arr[0].__ob__。现在模版里使用了arr，渲染函数执行将触发arr属性的get，data.arr的dep和data.arr.__ob__.dep都存了该依赖，但data.arr[0].__ob__.dep并没有收集有依赖。如果给arr[0]增加响应式属性，即this.$set(this.data.arr[0],'b',2)，没有依赖可触发，但数组元素确实变化了，为了这时也能触发arr的依赖，必须让data.arr[0].__ob__.dep也收集同一份依赖，这就是dependArray的作用。
+            // 通过索引修改数组元素值是不能触发响应的，Vue通过拦截数组的变异方法，加入触发依赖的操作(依赖存在数组的__ob__的dep)，从而使通过调用变异方法改变数组能触发依赖。假如元素正好是对象，你直接通过arr[index]去修改元素，即使元素是响应式数据，也无法触发arr的依赖，只有通过$set给该元素对象添加/修改属性，触发data.arr[index].__ob__.dep中的依赖。所以该dep要存一份和arr的dep存的一样的依赖。所以响应式key的val是数组时，不仅数组本身的dep要收集依赖，它的子元素也要递归收集依赖，这样的话，通过$set改变数组的元素就能触发arr的依赖。
           }
         }
         return value // 正常返回属性值，这是get方法原本的功能
       },
       set(newVal) {
         var value = getter ? getter.call(obj) : val//如果key本来就有get方法，直接执行返回值赋给value，如果没有get方法，val赋给value，val可能是传入的val也可能是obj[key]
-        // 新值和旧值做比较，如果新值和旧值相同，就没有触发依赖和重新设置属性值的必要，直接返回
+        // 如果新值和旧值相同，不用设置属性值，也不用触发依赖，直接返回
         if (newVal === value || (newVal !== newVal && value !== value)) return// NaN !== NaN
         if (customSetter) customSetter()
-        if (getter && !setter) return //key本来就有get没set，说明属性值不可改，没有触发更新的必要
+        if (getter && !setter) return //key本来就有get没set，属性值不可改，没有触发更新的必要
         if (setter) { // 如果key原本就有setter，调用setter来设置函数的值，保证属性原有的赋值操作不变
           setter.call(obj, newVal)
         } else { // key原本就没有set方法，直接将新值赋给val
           val = newVal;
         }
-        childOb = !shallow && observe(newVal); // 设置的新val可能也要观测，返回的值覆盖给childOb
-        dep.notify(); // 把key的dep里的依赖触发
+        childOb = !shallow && observe(newVal) // 设置的新val可能也要观测，返回的值覆盖给childOb
+        dep.notify() // 把key的dep里的依赖触发
       }
     });
   }
 
-  // 给响应式的嵌套对象添加一个响应式属性，并且会触发响应式对象的依赖。受Object.defineProperty的局限，Vue无法探测对象属性的添加或删除，你往val添加了属性，却无法触发key的依赖
+  // 给响应式的嵌套对象添加一个响应式属性，并且会触发响应式对象的依赖。受Object.defineProperty的局限，Vue无法探测对象属性的添加或删除，你往val添加了属性无法触发key的依赖
   function set (target, key, val) { // target是已响应化的嵌套对象 key是响应式属性 val是属性值
     if (isUndef(target) || isPrimitive(target)) warn("不能给基本类型设置响应式属性(string,number,bigint,boolean,null,undefined,symbol)")
-    // 如果target是数组，set函数可以替换/新增元素，并触发数组的依赖
-    if (Array.isArray(target) && isValidArrayIndex(key)) { // 索引要是有效索引
-      target.length = Math.max(target.length, key) //数组的length根据key值调整，因为假如设置的元素的索引大于数组长度，无论设置多大，splice(key,1,val)都只是将val追加到数组末尾
-      target.splice(key, 1, val); // 将指定索引(key)的元素替换为val
-      // 因为splice是数组变异方法，target调用splice会调用ob.observeArray对新加入的元素进行观测，并会调用ob.dep.notify，触发数组的依赖。所以不用额外加入触发依赖的操作。
+    if (Array.isArray(target) && isValidArrayIndex(key)) {
+      target.length = Math.max(target.length, key)
+      target.splice(key, 1, val)
       return val
     }
-    if (key in target && !(key in Object.prototype)) {//如果target是对象，key在target对象中或target的原型链中已有定义(但不能在Object原型上)，直接修改属性值即可
-      target[key] = val; //因为target是被观测的，直接修改它的属性值可以触发依赖
+    // 如果target是数组，set函数可以替换/新增指定索引(key)的元素为val，并触发数组的依赖，前提是索引是有效索引。数组的长度会根据key值做调整，因为如果设置的元素的索引大于数组长度，无论大过多少，splice(key,1,val)都只是将val追加到数组末尾。并且因为是数组变异方法，会调用ob.observeArray对新增元素进行观测，并调用ob.dep.notify，所以不用额外加入触发依赖的操作
+    if (key in target && !(key in Object.prototype)) {
+      target[key] = val
       return val
     }
+    // 如果target是对象，key在target对象中或原型链中已有定义，直接修改属性值即可，但不能在Object原型上，不能修改Object原型上的属性。因为target是被观测的，直接修改它的属性值可以触发依赖
     var ob = (target).__ob__; // 定义ob，指向target.__ob__
     if (target._isVue || (ob && ob.vmCount)) { // ob存在且ob.vmCount>0，说明target是根data
       warn('不能给Vue实例添加属性，避免属性的覆盖。也不能用$set给根级别data添加响应式属性，你应该在初始化前就定义好所有根级别的响应式属性，哪怕赋给它一个空值，因为Vue会在实例初始化时对属性做getter/setter转化')
       return val
-      // 为什么不准动态添加根级别的响应式属性，因为这样并不能触发依赖。我们观测根data，是把data的key转成响应式属性，根data的确有__ob__，值为Observer实例，但data本身不是响应式的(没有自己的get/set)，data被依赖时，读取data并不会做依赖收集。所以当Vue.set(data,'xxx',1)时，此函数内部调用了data.__ob__.dep.notify()，但这个dep里并没有依赖可触发。
     }
-    if (!ob) { // target.__ob__不存在，说明target没有被观测，直接设置属性值，不用触发依赖
+    // 为什么不准动态添加根级别的响应式属性，因为这样并不能触发依赖。我们观测根data，是把data的key转成响应式属性，根data的确有__ob__，值为Observer实例，但data本身不是响应式的(没有自己的get/set)，data被依赖时，读取data并不会做依赖收集。所以当Vue.set(data,'xxx',1)时，此函数内部调用了data.__ob__.dep.notify()，但这个dep里并没有依赖可触发。
+    if (!ob) {
       target[key] = val;
       return val
     }
-    defineReactive$$1(ob.value, key, val) // ob存在，说明target被观测过，给target添加响应式属性key和对应的val
-    ob.dep.notify() // 触发存在target.__ob__.dep中的依赖
+    // 如果target没有被观测过，直接设置属性值，不用触发依赖，如果被观测过，给target添加响应式属性key和对应的val
+    defineReactive$$1(ob.value, key, val)
+    ob.dep.notify() // 触发存在target.__ob__.dep中的依赖(和target对应的key的dep存的依赖相同)，key的依赖被触发
     return val
   }
-  /**Vue.set给数组val设置响应式属性：使用splice方法替换/新增元素，能触发val对应的key的依赖。给已经存在于目标对象的或原型链上的key，直接改动其属性值，因为key原本就是响应式属性的话，改变它的属性值也会触发响应，不是响应式属性，那也直接改变它属性值就好。核心是最后两句：调用defineReactive给响应式对象定义新的响应式属性，改变了key的val，所以要触发target.__ob__.dep收集的依赖(和target对应的key的dep存的依赖相同)，key的依赖被触发*/
   
-  // 当一个数据属性被依赖了，它的val是对象，你从val中删除一个属性时，这意味着val改变了，你期待key的依赖被触发，但受限于Object.defineProperty，Vue不能检测到属性被删除这个操作。Vue靠的是Vue.delete实现在删除属性时也能触发依赖。
+  // 当响应式属性被依赖了，它的val是对象，你从val中删除一个属性时，这意味着val改变了，你期待key的依赖被触发，但受限于Object.defineProperty不能检测到属性被删除这个操作。Vue.delete实现此时也能触发依赖。
   function del(target, key) {
     if (isUndef(target) || isPrimitive(target)) {
       warn("target是undefined、null等基本类型值，它们没有属性给你删除呀")
     }
     if (Array.isArray(target) && isValidArrayIndex(key)) {
-      target.splice(key, 1) // target是数组，肯定是响应式的，它调用数组变异方法splice时，会调用ob.dep.notify，触发数组的依赖，所以不用特别的加入依赖触发的操作
+      target.splice(key, 1) // ，肯定是响应式的
       return
     }
+    // 如果target是数组，它调用数组变异方法splice时，会调用ob.dep.notify，触发数组的依赖，所以不用额外加入依赖触发的操作
     var ob = (target).__ob__;
     if (target._isVue || (ob && ob.vmCount)) {
-      warn('不能删除Vue实例上的属性，这是处于安全因素考虑；也不能删除根data中的属性，是因为这触发不了响应，前面已经分析过了：data不是响应式的属性，data被读取时不会触发get函数收集依赖，所以data.__ob__.dep没有收集到依赖，比如你Vue.set(data, "aaa", 1)，data.__ob__.dep里就没有依赖给你触发。所以你把属性值设为null就好')
+      warn('不能删除Vue实例上的属性是出于安全考虑；也不能删除根data中的属性，因为这触发不了响应，前面已分析过：data不是响应式的属性，data被读取时不会触发get函数收集依赖，所以data.__ob__.dep没有收集到依赖，比如你Vue.set(data, "aaa", 1)，data.__ob__.dep里就没有依赖给你触发。所以你把属性值设为null就好')
       return
     }
     if (!hasOwn(target, key)) return // 如果你要删除的属性不在目标对象上，直接返回
@@ -625,58 +625,54 @@
     if (!ob) return // target没有被观测过，删除属性后不用触发依赖
     ob.dep.notify(); // 触发target的Observer实例的dep存放的依赖
   }
-
-  function dependArray (v) { // 让数组的每一项的__ob__的dep收集依赖
-    v.forEach(e => { // 遍历数组，如果当前元素e存在，且e是被观测的对象/数组
-      e && e.__ob__ && e.__ob__.dep.depend() //让e.__ob__.dep收集当前依赖
-      if (Array.isArray(e)) //有可能数组元素e依然是数组，递归调用dependArray
-        dependArray(e) //嵌套数组的每个元素(数组/对象)也收集当前依赖
+  // 数组响应式化，让数组元素都响应式化，遍历数组，如果元素e存在且是被观测过的，则让e.__ob__.dep收集当前依赖，有可能元素e仍然是数组，递归调用dependArray
+  function dependArray (v) {
+    v.forEach(e => {
+      e && e.__ob__ && e.__ob__.dep.depend()
+      if (Array.isArray(e)) dependArray(e)
     })
   }
+  //strats是合并选项的策略对象，包含很多合并特定选项的策略函数，不同的选项使用不同的合并策略
+  var strats = config.optionMergeStrategies 
 
-  var strats = config.optionMergeStrategies;
-
-  strats.el = strats.propsData = function (parent, child, vm, key) {
-    if (!vm) {
-      warn(`option "${key}" can only be used during instance ` +
-      'creation with the `new` keyword.')
+  {// 合并el选项和propsData选项的策略函数
+    strats.el = strats.propsData = function (parent, child, vm, key) {
+      // 如果没有传vm，即策略函数没有接收到vm，即mergeOptions调用时没有传vm，即合并的是子组件选项el或propsData，会警告：el或propsData选项都只能在使用new创建实例时使用。因为在父组件中使用el选项，没有问题，但在子组件中也使用el选项就不行。
+      if (!vm) warn(`"${key}"选项只能用在用new创建实例时`)
+      return defaultStrat(parent, child)
     }
-    return defaultStrat(parent, child)
-  };
-
+  }
   // 循环合并两个data数据对象
   function mergeData(to, from) {
-    if (!from) return to // 没有from直接返回to
+    if (!from) return to //如果只传了一个参数，直接返回它
     var key, toVal, fromVal;
     var keys = hasSymbol ? Reflect.ownKeys(from) : Object.keys(from);
     // Object.keys()返回属性key组成的数组，但不包括不可枚举的属性。Reflect.ownKeys()返回所有属性key,相当于 Object.getOwnPropertyNames(target).concat(Object.getOwnPropertySymbols(target)
-    // 遍历from的key
+    // 遍历from的key，遍历到的key是__ob__则跳过本次循环。获取to中key对应的val，from中key对应的val
     for (var i = 0; i < keys.length; i++) {
       key = keys[i];
-      if (key === '__ob__') continue //如果遍历到的key是不可枚举的__ob__，跳过本次循环
-      toVal = to[key]; // to中key对应的val
-      fromVal = from[key]; // from中key对应的val
-      if (!hasOwn(to, key)) { // 如果to对象没有自有属性key
-        set(to, key, fromVal); // 给to对象新增一个响应式的key，值为from中的val
-      } else if ( // 如果to对象已经有了自身属性key，在下面情况下，才会递归调用mergeData
-        toVal !== fromVal && // to from中key对应的val不相等，且他们都是对象
-        isPlainObject(toVal) &&
-        isPlainObject(fromVal)
+      if (key === '__ob__') continue //不用合并的
+      toVal = to[key]
+      fromVal = from[key]
+      if (!hasOwn(to, key)) { // 如果to对象没有自有属性key，则添加一个响应式属性key，值为from中的val
+        set(to, key, fromVal)
+      } else if ( // 如果to对象已存在自身属性key，该key对应的属性值不同，且都是纯对象，递归调用mergeData
+        toVal !== fromVal && isPlainObject(toVal) && isPlainObject(fromVal)
       ) {
-        mergeData(toVal, fromVal);
+        mergeData(toVal, fromVal) //对属性值进行递归调用mergeData进行合并
       }
     }
     return to // mergeData执行返回的才是真正的数据对象
   }
 
-  // 我们知道无论是子组件选项还是非子组件选项，strats.data策略函数都是通过调用mergeDataOrFn处理，为什么在合并阶段，strats.data执行返回一个函数，并没有做真正的合并，而是在后面初始化阶段才调用mergeData函数进行合并处理，这么做的原因是，inject和props选项的初始化是先于data选项的，这就保证了我们能使用props初始化data中的数据。比如父组件向子组件传prop，prop数据能用在子组件的data选项里，这是因为1、props的初始化比data的初始化早，2.data选项是初始化阶段才求值的，即在初始化时才使用mergeData进行数据合并
+  //在合并阶段，strats.data执行，即mergeDataOrFn执行，返回的是一个函数，并没有做真正的合并，而是在后面初始化阶段才调用mergeData函数进行合并处理，因为：inject和props选项的初始化是先于data选项的，保证了prop数据能用来初始化data中的数据。比如父组件向子组件传prop，prop数据能用在子组件的data选项里，这是因为1.props的初始化比data的初始化早，2.初始化阶段才调用mergeData进行数据合并生成data选项
   function mergeDataOrFn (parentVal, childVal, vm) {
-    if (!vm) { // 如果没传vm，说明处理的是子组件选项，合并操作是在Vue.extend中进行的，即在处理子组件的选项，而且此时childVal和parentVal都应该是函数。那么这里真的能保证childVal和parentVal都是函数吗？其实是可以的，我们后面会讲到。
+    if (!vm) { // 如果没传vm，说明处理的是子组件data选项，合并操作是在Vue.extend中进行的，此时parentVal和childVal，即父子data选项都应该是函数
       if (!childVal) return parentVal
       if (!parentVal) return childVal
-      // 如果没有childVal，也就是说子组件的选项中没有data选项，直接返回parentVal，比如下面：
+      //如果childVal没传，即子组件的选项中没有data选项，直接返回parentVal，比如下面：
       // Vue.extend({})
-      // 使用Vue.extend创建子类时，传递的子组件选项是一个空对象，即没有data选项，那么此时parentVal实际是Vue.options，由于Vue.options上也没有data这个属性，所以压根不会执行strats.data策略函数，更不会执行mergeDataOrFn。既然都没有执行，那么return parentVal是不是多余？不多余，因为parentVal存在有值的情况。什么时候出现childVal不存在但是parentVal存在的情况？
+      //使用Vue.extend创建子类时，传入的子组件选项是一个空对象，即没有data选项，此时parentVal是Vue.options，Vue.options上也没有data这个属性，所以mergeOptions执行时遍历不到data属性，所以不会执行strats.data函数，不会执行mergeDataOrFn。那么上面两句是否多余？不多余，因为可能是childVal不存在，但parentVal存在的情况：
       // const Parent = Vue.extend({
       //   data: function () {
       //     return {
@@ -685,8 +681,8 @@
       //   }
       // })
       // const Child = Parent.extend({})
-      // 上面代码Parent类继承了Vue，而Child又继承了Parent，我们使用Parent.extend创建Child子类时，对Child类来讲，childVal不存在，因为我们没有传递data选项，但是parentVal存在，即Parent.options下的data选项，Parent.options是哪里来的呢？实际是Vue.extend函数内使用mergeOptions生成的，所以此时parentVal必定是个函数，因为strats.data策略函数在处理data选项后返回的始终是一个函数
-      // 如果没有子选项则使用父选项，没有父选项就直接使用子选项，且这两个选项都能保证是函数，如果父子选项同时存在，则继续执行下面的代码：
+      // Parent类继承了Vue，而Child又继承了Parent，使用Parent.extend创建Child子类时，mergeDataOrFn执行时，childVal不存在(因为没有传递data选项)，但是parentVal存在，即Parent.options下的data选项，Parent.options实际是Vue.extend函数内使用mergeOptions生成的，strats.data策略函数在处理data选项后返回的始终是一个函数，所以parentVal必定是个函数
+      // 如果没有子选项则使用父选项，没有父选项就直接使用子选项，且这两个选项都能保证是函数，如果父子选项同时存在，则返回mergedDataFn函数：
       return function mergedDataFn () {
         return mergeData(
           typeof childVal === 'function' ? childVal.call(this, this) : childVal,
@@ -706,26 +702,22 @@
     }
   }
 
-  // 在strats策略对象上添加data的策略函数，用来合并处理data选项，为什么最终data被合并处理成一个函数，是因为通过函数返回数据对象，保证了每个组件实例都有一个唯一的数据副本，避免了组件间数据相互影响，在初始化数据状态时，是通过执行data函数来获取数据对象，并对其进行处理的
-  strats.data = function (parentVal, childVal, vm) { // childVal 是子组件的data选项
-    if (!vm) { // 当没传vm时，说明处理的是子组件选项
-      // 首先判断是否传递了子组件的data选项(即childVal)，并且检测childVal是不是函数，如果不是函数会给警告，子组件中的data必须是一个返回对象的函数。直接返回parentVal
+  //合并处理data选项的策略函数，通过判断vm是否存在，得知mergeOptions是在实例化时调用(_init函数执行)，还是在Vue.extend继承时调用。而子组件的实现是通过实例化子类完成的，子类又是通过Vue.extend创造出来的。
+  strats.data = function (parentVal, childVal, vm) {
+    // 当没传vm时，即data选项的策略函数没有接收到vm，即mergeOptions调用时没有传vm，即处理的是子组件的data选项，而不是创建实例时合并data选项。
+    if (!vm) {
+      // 如果传了子组件的data选项，且不是函数，会发出警告：子组件中的data必须是返回一个对象的函数。直接返回parentVal
       if (childVal && typeof childVal !== 'function') {
         warn('组件里的"data"选项必须是一个返回单例对象的函数', vm);
         return parentVal
       }
-      return mergeDataOrFn(parentVal, childVal)// 如果childVal是函数，返回mergeDataOrFn的执行结果
+      // 如果子组件的data选项没传，或传的是函数，直接返回mergeDataOrFn的执行结果
+      return mergeDataOrFn(parentVal, childVal)
     }
-    // 如果传了vm，说明处理的选项不是子组件的选项，而是正常使用new创建实例时的选项，这时返回mergeDataOrFn的执行结果，会多传一个vm
-    return mergeDataOrFn(parentVal, childVal, vm)
+    // 如果传了vm，说明处理的是使用new创建实例时的data选项，返回mergeDataOrFn的执行结果
+    return mergeDataOrFn(parentVal, childVal, vm) // 多传一个vm
   };
-  // 简单总结：data选项最终被mergeOptions函数处理成了一个函数，当合并处理的是子组件的选项时data函数可能是以下三者之一：
-  // 1、就是data本身，因为子组件的data选项本身就是一个函数，没有父组件的data选项就直接用子组件的data选项
-  // 2、父类的data选项，如果没有子选项则使用父选项data，也是函数
-  // 3、mergedDataFn函数，父子组件都有data选项
-  
-  // 当合并处理的是非子组件的选项时，data函数为mergedInstanceDataFn函数
-
+  //可见，strats.data策略函数无论合并处理的是子组件的选项还是非子组件的选项，最终都是调用mergeDataOrFn函数进行处理，并以mergeDataOrFn的返回值作为策略函数的最终返回值。有一点不同是：在处理非子组件选项时所调用的mergeDataOrFn函数多传了一个vm。
 
   // 我们要明确一点：用户定义的生命周期函数选项是在new Vue()时通过参数传入给Vue内部，也就是Vue的构造函数能通过options参数拿到用户设置的钩子
   // 用户配置的options和Vue本来的options会合并生成新的options，赋给vm.$options，Vue内部是通过vm.$options获取用户设置的钩子的，比如vm.$options.created就拿到用户定义的created钩子
@@ -870,8 +862,8 @@
     return ret // 最后返回ret
   };
   
-  strats.provide = mergeDataOrFn;
-
+  strats.provide = mergeDataOrFn
+  // 默认策略函数，当一个选项不需要特殊处理时，使用默认的合并策略：如果子选项是undefined，则使用父选项，否则使用子选项
   var defaultStrat = (parentVal, childVal) => childVal === undefined ? parentVal : childVal
 
   function validateComponentName(name) {
@@ -945,47 +937,45 @@
       warn(`无效的option value"${name}": 期待是一个对象, 但你传了${toRawType(value)}.`, vm)
     }
   }
-  // options的合并，在new Vue时调用了_init函数，_init内部调用mergeOptions将Vue.options和配置对象进行合并；Vue.mixin和子类的mixin中也用到了；Vue.extend和子类的extend中也用到了，合并父类options和扩展配置对象
-  function mergeOptions (parent, child, vm) { //parent代表当前实例的构造函数的options，child代表实例化时传入的options，vm当前实例。mergeoptions方法是要合并构造函数和传入的options这两个对象。
-    for (var key in child.components) {// 如果child选项对象中有components
-      validateComponentName(key); // 校验components中注册的组件名是否合法
-    }
-    if (typeof child === 'function') { //如果child是函数，取其options作为child
-      child = child.options;
-    }
-    normalizeProps(child, vm); // 规范化props,inject,directives属性，分别把options中它们转成对象的形式。因为有些可能以数组的形式传入
+  // 除了在new Vue时调用_init时，_init内部调用mergeOptions将构造器的options和传入的options合并；Vue.mixin和子类的mixin中也用到了；Vue.extend和子类的extend中也用到了，合并父类options和扩展配置对象
+  function mergeOptions(parent, child, vm) {
+    //parent代表当前实例的构造函数的options，child代表实例化时传入的options，vm当前实例。
+    // 如果child中有components，校验components中注册的组件名是否合法
+    for (var key in child.components) validateComponentName(key)
+    // 如果child是函数(构造器)，取它的options作为child
+    if (typeof child === 'function') child = child.options;
+    // 规范化options中的props,inject,directives属性，转为对象的形式，因为有些可能以数组的形式传入
+    normalizeProps(child, vm)
     normalizeInject(child, vm);
     normalizeDirectives(child);
-    if (!child._base) { // child._base为假，说明child不是Vue.options
-      // extends选项 允许声明扩展一个组件，可以传选项对象或构造函数，无需调用Vue.extend，主要是为了便于扩展简单文件组件，这和mixins类似
-      // var CompA = { ... }
-      // var CompB = {
-      //   extends: CompA,// 没有调用Vue.extend却继承 CompA
-      //   ...
-      // }
-      if (child.extends) { //如果child这个options传了extends选项，应该将extends的内容合并到实例的构造函数的options上(即parent的options)
-        parent = mergeOptions(parent, child.extends, vm);
-      }
-      if (child.mixins) { //如果child这个options传了mixins选项，遍历mixins数组，将每个mixin选项对象合并到实例的构造函数的options上(即parent的options)
+    // child._base为假，说明child不是Vue.options。如果child这个options传了extends选项，应当将extends选项对象合并到实例的构造函数的options上(即parent的options)。如果child这个options传了mixins选项，遍历mixins数组，将每个选项对象合并到实例的构造函数的options上
+    if (!child._base) { 
+      if (child.extends) parent = mergeOptions(parent, child.extends, vm)
+      if (child.mixins) {
         child.mixins.forEach(childMixin => {
           parent = mergeOptions(parent, childMixin, vm);
         })
       }
     }
-    // 因为mergeOptions返回的是新的对象，上面可能调用了mergeOptions，所以经过上面代码，parent可能已经不是原来的parent，而是经过合并后产生的新对象，上面做的都是对parent和child的预处理
-    var options = {}; // 最后要返回的对象
-    var key;
-    for (key in parent) { // 遍历parent
-      mergeField(key) // 将parent的key传入mergeField执行
+    // extends选项允许声明扩展一个组件，可以传选项对象或构造函数，无需调用Vue.extend，主要是为了便于扩展简单文件组件，这和mixins类似
+    // var CompA = { ... }
+    // var CompB = {
+    //   extends: CompA,// 没有调用Vue.extend却继承 CompA
+    //   ...
+    // }
+
+    // mergeOptions返回的是新的对象，上面可能已经调用了mergeOptions，parent可能已经不是原来的parent，而是经过合并后产生的新对象，上面做的都是对parent和child的预处理
+    var options = {}, key
+    for (key in parent) { // 遍历parent，将parent的key传入mergeField执行
+      mergeField(key)
     }
-    for (key in child) { // 遍历child对象，多了个判断
-      if (!hasOwn(parent, key)) { //如果child对象的key也在parent上出现，那就不用再调用mergeField了，因为上一个forin循环中已经调用过了
-        mergeField(key);
-      }
+    for (key in child) { // 遍历child，多了个判断：如果child对象的key在parent中也有，则不再调用mergeField，因为上一个forin循环中已经调用过了
+      if (!hasOwn(parent, key)) mergeField(key);
     }
-    function mergeField (key) { // 调用对应的策略函数合并某个字段key的选项
-      var strat = strats[key] || defaultStrat //strats是config.optionMergeStrategies合并选项的策略对象，这个对象内包含很多合并特定选项的策略函数，不同的选项使用不同的合并策略
-      options[key] = strat(parent[key], child[key], vm, key) //调用策略函数对parent和child的key进行合并，返回值赋给options[key]
+    // mergeField函数会获取key对应的策略函数并调用，合并parent和child的key对应的选项对象。返回值赋给options[key]。策略函数接收的vm来自于mergeOptions函数接收的vm，所以当调用mergeOptions时没传第三个参数时，则策略函数就拿不到vm
+    function mergeField (key) {
+      var strat = strats[key] || defaultStrat //strats.el和strats.propsData在生产环境中不存在，strat取默认的策略函数
+      options[key] = strat(parent[key], child[key], vm, key)
     }
     return options
   }
@@ -1653,7 +1643,6 @@
     }
   }
 
-
   function resolveSlots(children, context) {
     if (!children || !children.length) return {}
     var slots = {};
@@ -1714,7 +1703,6 @@
         }
       }
     }
-
     for (var key$2 in normalSlots) {
       if (!(key$2 in res)) {
         res[key$2] = proxyNormalSlot(normalSlots, key$2);
@@ -2543,12 +2531,8 @@
     }
   }
 
-
-  function isAsyncPlaceholder (node) {
-    return node.isComment && node.asyncFactory
-  }
-
-
+  const isAsyncPlaceholder = node => node.isComment && node.asyncFactory
+  // 找到第一个子组件
   function getFirstComponentChild (children) {
     if (Array.isArray(children)) {
       for (var i = 0; i < children.length; i++) {
@@ -2559,7 +2543,6 @@
       }
     }
   }
-
   // 模版编译阶段，可以得到某个标签上的所有属性，包括v-on或@注册的事件，整个模版会编译成渲染函数(一些嵌套在一起的创建vnode节点的函数)，类似这样：_c('div'...)。当渲染流程启动后，渲染函数执行生成一份vnode，随后patch函数会使用vnode进行对比和渲染，这个过程中会创建一些元素，此时会判断当前标签是真的标签还是一个组件，如果是组件标签，则会将子组件实例化并传入一些参数，其中包括父组件在模版中使用v-on注册在子组件标签上的事件；如果是一般标签，则创建元素并插入到dom中，同时将v-on注册的事件注册到浏览器事件中。简而言之，组件标签上的v-on注册的事件会注册到子组件的事件系统中，如果是一般标签上的v-on，事件会被注册到浏览器事件中。
   // 子组件在初始化时，即初始化vm时，可能会接收父组件向子组件注册的事件，而子组件自身在模版中注册的事件，只有在渲染时才会根据vnode的对比结果来确定是注册事件还是解绑事件，所以在初始化实例时，事件的初始化指的是父组件在模版中使用v-on监听子组件内触发的事件。
   function initEvents (vm) {
@@ -2696,9 +2679,10 @@
     if (parent && !options.abstract) { 
       while (parent.$options.abstract && parent.$parent) { 
         parent = parent.$parent;
-      }
+      } 
       parent.$children.push(vm);
     }
+    //为组件实例建立父子关系时会根据abstract属性决定是否忽略某个组件，最后构建的vnode树中就不会包含keep-alive组件，则由vnode树渲染成的DOM树自然不会有keep-alive相关的节点。
     //如果当前实例是抽象的，不会执行if语句，因此抽象实例不会被添加到父实例的$children中。如果当前实例不是抽象的，是一个普通的组件实例，开启while循环，逐层向上寻找，找到第一个不抽象的实例作为父级(抽象组件不能作为父级)，并将当前实例添加到父实例的$children属性中
     vm.$parent = parent;// 设置当前实例的$parent属性，指向父级
     vm.$root = parent ? parent.$root : vm; //如果没有父组件，根组件就是自己，如果有父组件，vm.$root就取父组件的$root。
@@ -3441,10 +3425,8 @@
       vm._isVue = true // _isVue是Vue实例的标识，区别于普通的对象，避免被观测 
       if (options && options._isComponent) { //_isComponent表明是内部子组件
         initInternalComponent(vm, options) // 主要为vm.$options添加一些属性
-      } else { //当前Vue实例不是组件，调用mergeOptions方法，将vm的构造器的options(合并了父级构造器的options)，和当前实例化时接收的options合并
-        vm.$options = mergeOptions(
-          resolveConstructorOptions(vm.constructor), options || {}, vm
-        )
+      } else { //当前Vue实例不是组件，调用mergeOptions方法，将vm的构造器的options(合并了父级构造器的options)，和当前实例化时接收的options合并。传入的当前vm实例。
+        vm.$options = mergeOptions(resolveConstructorOptions(vm.constructor), options || {}, vm)
       }
       initProxy(vm) //指定渲染函数的执行上下文为 vm的proxy代理，通过拦截函数提供友好的开发提示
       vm._self = vm; //vm._self指向当前vm实例自己
@@ -3657,24 +3639,22 @@
     }
     return false
   }
-  // pruneCache接收keepAlive实例，和一个匹配函数
+  // 根据include和exclude的变化，实时更新组件vnode缓存对象cache，将cache中不需要缓存的组件进行销毁
   function pruneCache (keepAliveInstance, filter) {
     var cache = keepAliveInstance.cache;
     var keys = keepAliveInstance.keys;
     var _vnode = keepAliveInstance._vnode;
-    // 获取keepAlive实例所缓存的组件vnode对象cache，缓存的组件名，本身对应的vnode
     for (var key in cache) { //遍历缓存的组件vnode对象
       var cachedNode = cache[key];
       if (cachedNode) { //当前组件vnode存在，获取组件名
         var name = getComponentName(cachedNode.componentOptions);
         if (name && !filter(name)) { //如果组件名存在，但组件不是要缓存的
           pruneCacheEntry(cache, key, keys, _vnode);
-          // 将不需要缓存的组件销毁，并对cache和keys做相应的调整
         }
       }
     }
   }
-
+  // 把cache中指定的组件vnode对应的组件实例进行销毁，通过调用$destroy
   function pruneCacheEntry(cache, key, keys, current) {
     var cached$$1 = cache[key];
     if (cached$$1 && (!current || cached$$1.tag !== current.tag)) {
@@ -3690,9 +3670,9 @@
       name: 'keep-alive',
       abstract: true,//是抽象组件，不渲染真实DOM到页面的，也不会出现在父级关系的路径(父组件链)上
       props: { //keep-alive组件允许使用props
-        include: patternTypes,//字符串或正则或数组，只有名称匹配的组件才会被缓存
-        exclude: patternTypes,//字符串或正则或数组，名称匹配的组件不会被缓存
-        max: [String, Number] //数字，最多可以缓存多少组件实例
+        include: patternTypes,//定义缓存白名单，只有名称匹配的组件才会被缓存
+        exclude: patternTypes,//定义缓存黑名单，名称匹配的组件不会被缓存
+        max: [String, Number] //定义缓存组件的数量上限
       },
       created() {
         this.cache = Object.create(null) // 缓存组件vnode
@@ -3713,35 +3693,32 @@
       },
       render() {
         const slot = this.$slots.default
-        const vnode = getFirstComponentChild(slot)
+        const vnode = getFirstComponentChild(slot)//获取keep-alive的第一个子组件vnode
         const componentOptions = vnode && vnode.componentOptions
-        if (componentOptions) {
-          // check pattern
-          const name = getComponentName(componentOptions)
-          const { include, exclude } = this
-          if (
-            (include && (!name || !matches(include, name))) ||
-            (exclude && name && matches(exclude, name))
-          ) {
+        if (componentOptions) { //如果存在第一个子组件的配置对象
+          const name = getComponentName(componentOptions)//获取包裹的第一个子组件的组件名
+          const { include, exclude } = this //获取两个prop值
+          if ((include && (!name || !matches(include, name))) || (exclude && name && matches(exclude, name))) {
+            // include值存在，且组件名不存在或组件存在但没有命中匹配。或者，exclude值存在，且组件名存在且命中了匹配，都表明不用缓存，直接返回组件vnode
             return vnode
           }
           const { cache, keys } = this
-          const key = vnode.key == null
-            ?
-            componentOptions.Ctor.cid + (componentOptions.tag ? `::${componentOptions.tag}` : '') :
+          const key = vnode.key == null ? //定义组件的缓存key
+            componentOptions.Ctor.cid + (componentOptions.tag ? `::${componentOptions.tag}` : '') ://根据组件id和tag生成缓存key
             vnode.key
-          if (cache[key]) {
+          if (cache[key]) { //如果已经缓存过该组件，从缓存中取vnode对应的组件实例，赋给vnode.componentInstance
             vnode.componentInstance = cache[key].componentInstance
             remove(keys, key)
-            keys.push(key)
-          } else {
+            keys.push(key) //更新该key在this.keys中的位置
+          } else { //缓存组件vnode对象
             cache[key] = vnode
             keys.push(key)
+            // 如果超过缓存数量限制，将销毁第一个，根据LRU置换策略删除最久没使用的实例
             if (this.max && keys.length > parseInt(this.max)) {
               pruneCacheEntry(cache, keys[0], keys, this._vnode)
             }
           }
-          vnode.data.keepAlive = true
+          vnode.data.keepAlive = true //将该组件实例的keepAlive属性值设置为true
         }
         return vnode || (slot && slot[0])
       }

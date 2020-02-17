@@ -10,7 +10,7 @@
   const isPrimitive = v => typeof v==='string'||typeof v==='number'||typeof v==='symbol'||typeof v ==='boolean'
   const isObject = obj => obj !== null && typeof obj === 'object' // 用于区分对象和原始值
   const _toString = Object.prototype.toString;
-  const toRawType = v => _toString.call(v).slice(8, -1) // 比如[object Object]的Object
+  const toRawType = v => _toString.call(v).slice(8,  -1) // 比如[object Object]的Object
   const isPlainObject = obj => _toString.call(obj) === '[object Object]' //严格的纯对象检查
   const isRegExp = v => _toString.call(v) === '[object RegExp]' // 是否是正则对象
   function isValidArrayIndex (val) { // 有效的数组索引满足：非负整数、有限数字
@@ -26,7 +26,8 @@
     var n = parseFloat(v);
     return isNaN(n) ? v : n
   }
-  // 在函数作用域中定义一个对象map，记录str拆分成数组的每一项，然后定义一个新的函数并返回，内层函数引用makeMap作用域内的变量map，形成了闭包，map对象并不会随着makeMap执行完毕而销毁，会继续留在内存空间。返回的新函数接收一个值，用来检测它是否存在对象map中。这个函数其实功能就一个：检查val是否是指定集合中的一员，因为函数要经常调用，不希望每次调用都创建一个map对象，所以通过闭包实现makeMap执行一次之后，map对象驻留在内存中；而且函数柯里化了，本来要传3个参数，选择参数分两次传入
+// 在函数作用域内创建一个map对象，记录传入的str字符串split成数组的每一项，然后定义并返回一个新的函数，这个内层函数引用makeMap函数作用域里的map对象，形成闭包，map对象不会随着makeMap执行完毕而销毁，会继续存在于内存中，返回的新函数接收一个值，用来检测这个值是否存在于map对象中。
+// 因为这个函数经常要调用，不希望每次调用都创建一个map对象，所以通过闭包实现makeMap执行一次之后，map对象驻留在内存中，而且函数柯里化了，本来要传3个参数，现在参数分两次传入
   function makeMap(str, expectsLowerCase) {
     var map = Object.create(null);
     str.split(',').forEach(item => {
@@ -67,10 +68,10 @@
       $2: 匹配值在原字符串中的索引
       $3: 原字符串 */
   var capitalize = cached(str => str.charAt(0).toUpperCase() + str.slice(1)) // 首字母大写
-  // 驼峰转连字符加小写  aaaBBB aaa-bbb
+  // 驼峰转连字符加小写  aaaBbb aaa-bbb
   var hyphenateRE = /\B([A-Z])/g // \b单词边界 \B非单词边界。匹配出非单词边界的大写字母
-  var hyphenate = cached(str   => str.replace(hyphenateRE, '-$1').toLowerCase())
-  // abcDef的话匹配字符D，替换成'-$1'。$n代表括号匹配到的内容，也就是D，所以变成abc-Def，再转小写abc-def
+  var hyphenate = cached(str => str.replace(hyphenateRE, '-$1').toLowerCase())
+  // abcDef的话匹配字符D，替换成'-$1'。$1代表括号匹配到的内容，也就是D，所以变成abc-Def，再转小写abc-def
   function polyfillBind(fn, ctx) {
     function boundFn(a) {
       return arguments.length ?
@@ -355,7 +356,7 @@
       })
     }
   }
-  // Dep.target是当前正在求值的watcher实例，是全局唯一的，当某个watcher调用它的get方法对被观察目标求值时，会将自己赋给Dep.target，并将自己压入targetStack，等到这个watcher求值完毕后，会从targetStack栈中取出之前的Dep.target，重新作为当前的Dep.targe
+  // Dep.target是当前正在求值的watcher实例，是全局唯一的，当某个watcher调用它的get方法对被观察目标求值时，会将自己赋给Dep.target，并将自己压入targetStack，等到这个watcher求值完毕后，会从targetStack栈中取出之前的Dep.target，重新作为当前的Dep.target
   Dep.target = null;
   var targetStack = []; // 用来存放watcher的栈
   function pushTarget(target) {

@@ -1,285 +1,113 @@
 /*!
  * Vue.js v2.6.11
- * (c) 2014-2019 Evan You
- * Released under the MIT License.
  */
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
   typeof define === 'function' && define.amd ? define(factory) :
   (global = global || self, global.Vue = factory());
 }(this, function () { 'use strict';
-
-  /*  */
-
-  var emptyObject = Object.freeze({});
-
+  var emptyObject = Object.freeze({}); // 冻结的空对象，不可扩展不可配置不可写
   // These helpers produce better VM code in JS engines due to their
   // explicitness and function inlining.
-  function isUndef (v) {
-    return v === undefined || v === null
-  }
-
-  function isDef (v) {
-    return v !== undefined && v !== null
-  }
-
-  function isTrue (v) {
-    return v === true
-  }
-
-  function isFalse (v) {
-    return v === false
-  }
-
-  /**
-   * Check if value is primitive.
-   */
-  function isPrimitive (value) {
-    return (
-      typeof value === 'string' ||
-      typeof value === 'number' ||
-      // $flow-disable-line
-      typeof value === 'symbol' ||
-      typeof value === 'boolean'
-    )
-  }
-
-  /**
-   * Quick object check - this is primarily used to tell
-   * Objects from primitive values when we know the value
-   * is a JSON-compliant type.
-   */
-  function isObject (obj) {
-    return obj !== null && typeof obj === 'object'
-  }
-
-  /**
-   * Get the raw type string of a value, e.g., [object Object].
-   */
+  const isUndef = v => v === undefined || v === null // 是否为null或undefined
+  const isDef = v => v !== undefined && v !== null // 是否有定义
+  const isTrue = v => v === true
+  const isFalse = v => v === false
+  const isPrimitive = v => typeof v==='string'||typeof v==='number'||typeof v==='symbol'||typeof v ==='boolean' // 检查一个值是否是原始类型值
+  const isObject = obj => obj !== null && typeof obj === 'object' // 快速的对象检查，区分对象和原始类型值
   var _toString = Object.prototype.toString;
-
-  function toRawType (value) {
-    return _toString.call(value).slice(8, -1)
-  }
-
-  /**
-   * Strict object type check. Only returns true
-   * for plain JavaScript objects.
-   */
-  function isPlainObject (obj) {
-    return _toString.call(obj) === '[object Object]'
-  }
-
-  function isRegExp (v) {
-    return _toString.call(v) === '[object RegExp]'
-  }
-
-  /**
-   * Check if val is a valid array index.
-   */
-  function isValidArrayIndex (val) {
-    var n = parseFloat(String(val));
+  const toRawType = v => _toString.call(v).slice(8, -1) // 获取raw type字符串中的type，比如[object Object]的Object
+  const isPlainObject = obj => _toString.call(obj) === '[object Object]' // 严格的纯对象检查
+  const isRegExp = v => _toString.call(v) === '[object RegExp]' // 是否是正则对象
+  function isValidArrayIndex (val) { // 是否是数组的有效索引
+    var n = parseFloat(String(val)); // 满足非负整数 有限数字
     return n >= 0 && Math.floor(n) === n && isFinite(val)
   }
-
-  function isPromise (val) {
-    return (
-      isDef(val) &&
-      typeof val.then === 'function' &&
-      typeof val.catch === 'function'
-    )
-  }
-
-  /**
-   * Convert a value to a string that is actually rendered.
-   */
-  function toString (val) {
-    return val == null
-      ? ''
-      : Array.isArray(val) || (isPlainObject(val) && val.toString === _toString)
-        ? JSON.stringify(val, null, 2)
-        : String(val)
-  }
-
-  /**
-   * Convert an input value to a number for persistence.
-   * If the conversion fails, return original string.
-   */
-  function toNumber (val) {
+  const isPromise = v => isDef(v) && typeof v.then === 'function' && typeof v.catch === 'function'
+  const toString = v => v == null ? '' : // 值转字符串，如果值==null则转成''。如果是对象/数组，则调用JSON.stringify，否则直接调用String
+    Array.isArray(v) || (isPlainObject(v) && v.toString === _toString) ?
+      JSON.stringify(v, null, 2) : String(v) 
+  // JSON.stringify将值转成JSON字符串，接收三个参数：待转换的值，通常是数组或对象；转换函数，如果传了函数则对象的每个属性都经过它的处理，如果传了一个数组，则只有包含在数组里的属性名才会被转换到最终的json字符串中，如果传null或没传，则地下所有属性都会被转换，最后一个参数是缩进数，美化输出
+  function toNumber (val) { // 转数字，转成NaN就返回原本值
     var n = parseFloat(val);
     return isNaN(n) ? val : n
   }
-
-  /**
-   * Make a map and return a function for checking if a key
-   * is in that map.
-   */
-  function makeMap (
-    str,
-    expectsLowerCase
-  ) {
-    var map = Object.create(null);
-    var list = str.split(',');
-    for (var i = 0; i < list.length; i++) {
-      map[list[i]] = true;
-    }
-    return expectsLowerCase
-      ? function (val) { return map[val.toLowerCase()]; }
-      : function (val) { return map[val]; }
+  // makeMap函数中创建一个map对象，记录传入的str字符串split成数组的每一项，然后定义并返回一个新的函数，这个内层函数引用map对象，形成闭包，map对象不会随着makeMap函数执行完而销毁，会继续存在内存中，返回的新函数接收一个值，用来检测这个值是否存在于map对象中。因为makeMap函数经常要调用，不希望每次调用都创建一个map对象，所以通过闭包实现makeMap执行一次后，map对象驻留在内存中，而且函数柯里化使得本来要传3个参数，现在分两次传入
+  function makeMap (str, expectsLowerCase) {
+    var map =Object.create(null);
+    str.split(',').forEach(item => {
+      map[item] = true
+    })
+    return expectsLowerCase ?
+      val => map[val.toLowerCase()] :
+      val => map[val]
   }
-
-  /**
-   * Check if a tag is a built-in tag.
-   */
-  var isBuiltInTag = makeMap('slot,component', true);
-
-  /**
-   * Check if an attribute is a reserved attribute.
-   */
-  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is');
-
-  /**
-   * Remove an item from an array.
-   */
-  function remove (arr, item) {
+  var isBuiltInTag = makeMap('slot,component', true); // 检查是否是内置的标签名
+  var isReservedAttribute = makeMap('key,ref,slot,slot-scope,is'); // 检查是否是Vue内部的保留attribute名
+  function remove (arr, item) { // 从数组中移除指定元素
     if (arr.length) {
       var index = arr.indexOf(item);
-      if (index > -1) {
+      if (index > -1) { // 移除成功则返回被移除的项
         return arr.splice(index, 1)
       }
     }
   }
-
-  /**
-   * Check whether an object has the property.
-   */
-  var hasOwnProperty = Object.prototype.hasOwnProperty;
-  function hasOwn (obj, key) {
-    return hasOwnProperty.call(obj, key)
-  }
-
-  /**
-   * Create a cached version of a pure function.
-   */
+  // 检查对象中是否有自有属性key
+  let hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key)
+  // cached函数接收fn，返回一个新的函数，新函数接收字符串str，通过闭包引用cached函数中的cache对象，cache对象中存放缓存值。新函数中，根据str优先获取并返回cache对象中的缓存值，如果获取不到，则调用fn执行一次，把执行结果存入cache对象并返回。因此cached(fn)这个函数接收相同的str就不用每次都执行fn
   function cached (fn) {
     var cache = Object.create(null);
-    return (function cachedFn (str) {
-      var hit = cache[str];
+    return str => {
+      var hit = cache[str]
       return hit || (cache[str] = fn(str))
-    })
-  }
-
-  /**
-   * Camelize a hyphen-delimited string.
-   */
-  var camelizeRE = /-(\w)/g;
-  var camelize = cached(function (str) {
-    return str.replace(camelizeRE, function (_, c) { return c ? c.toUpperCase() : ''; })
-  });
-
-  /**
-   * Capitalize a string.
-   */
-  var capitalize = cached(function (str) {
-    return str.charAt(0).toUpperCase() + str.slice(1)
-  });
-
-  /**
-   * Hyphenate a camelCase string.
-   */
-  var hyphenateRE = /\B([A-Z])/g;
-  var hyphenate = cached(function (str) {
-    return str.replace(hyphenateRE, '-$1').toLowerCase()
-  });
-
-  /**
-   * Simple bind polyfill for environments that do not support it,
-   * e.g., PhantomJS 1.x. Technically, we don't need this anymore
-   * since native bind is now performant enough in most browsers.
-   * But removing it would mean breaking code that was able to run in
-   * PhantomJS 1.x, so this must be kept for backward compatibility.
-   */
-
-  /* istanbul ignore next */
-  function polyfillBind (fn, ctx) {
-    function boundFn (a) {
-      var l = arguments.length;
-      return l
-        ? l > 1
-          ? fn.apply(ctx, arguments)
-          : fn.call(ctx, a)
-        : fn.call(ctx)
     }
+  } // cached并不改变原函数的行为，只是通过缓存对象避免多余的调用求值。
 
+  var camelizeRE = /-(\w)/g; // 匹配-和-后的一个字符(字母/数字/_)
+  // camelize连字符转驼峰函数传入'aaa-bbb'，始终返回'aaaBbb'，一个项目中可能要对同一个字符串多次camelize，不用每次都执行回调，只需从缓存中读取即可
+  var camelize = cached(str => str.replace(camelizeRE, (_, c) => c ? c.toUpperCase() : ''))
+  // replace方法返回一个用替换值替换一些或所有匹配的模式后的新字符串，模式可以是一个字符串或正则表达式，替换值可以是一个字符串或一个每次匹配都要调用的回调函数。原字符串不会改变
+  /** str.replace(reg, ($0, $1, $2, $3) => { })
+      $0: 正则匹配到的字符串
+      $1: 在使用组匹配时，组匹配到的值
+      $2: 匹配值在原字符串中的索引
+      $3: 原字符串 */
+  var capitalize = cached(str => str.charAt(0).toUpperCase() + str.slice(1)) // 首字母大写化
+  // \b单词边界 \B非单词边界 这是匹配出非单词边界的大写字母
+  var hyphenateRE = /\B([A-Z])/g;
+  var hyphenate = cached(str => str.replace(hyphenateRE, '-$1').toLowerCase()) // 驼峰转连字符加小写 aaaBbb aaa-bbb
+  // abcDef的话，匹配字符D，替换成'-$1'，$1代表组匹配的内容，即D，替换成-D，变成abc-Def，再变成abc-def
+  function polyfillBind (fn, ctx) {
+    function boundFn(a) {
+      return arguments.length ?
+        arguments.length > 1 ?
+        fn.apply(ctx, arguments) :
+        fn.call(ctx, a) :
+        fn.call(ctx)
+    }
     boundFn._length = fn.length;
     return boundFn
   }
-
-  function nativeBind (fn, ctx) {
-    return fn.bind(ctx)
-  }
-
-  var bind = Function.prototype.bind
-    ? nativeBind
-    : polyfillBind;
-
-  /**
-   * Convert an Array-like object to a real Array.
-   */
-  function toArray (list, start) {
-    start = start || 0;
-    var i = list.length - start;
-    var ret = new Array(i);
-    while (i--) {
-      ret[i] = list[i + start];
-    }
-    return ret
-  }
-
-  /**
-   * Mix properties into target object.
-   */
-  function extend (to, _from) {
+  const nativeBind = (fn, ctx) => fn.bind(ctx)
+  var bind = Function.prototype.bind ? nativeBind : polyfillBind;
+  const toArray = (arrayLike, start = 0) => [...arrayLike].slice(start)// 类数组转为真数组
+  function extend (to, _from) { // _from对象的属性扩展到对象to
     for (var key in _from) {
       to[key] = _from[key];
     }
     return to
   }
-
-  /**
-   * Merge an Array of Objects into a single Object.
-   */
+  // 把一个对象数组的所有对象合并到一个对象中
   function toObject (arr) {
     var res = {};
-    for (var i = 0; i < arr.length; i++) {
-      if (arr[i]) {
-        extend(res, arr[i]);
-      }
-    }
+    arr.forEach(item => {
+      if (item) extend(res, item)
+    })
     return res
   }
-
-  /* eslint-disable no-unused-vars */
-
-  /**
-   * Perform no operation.
-   * Stubbing args to make Flow happy without leaving useless transpiled code
-   * with ...rest (https://flow.org/blog/2017/05/07/Strict-Function-Call-Arity/).
-   */
   function noop (a, b, c) {}
-
-  /**
-   * Always return false.
-   */
-  var no = function (a, b, c) { return false; };
-
-  /* eslint-enable no-unused-vars */
-
-  /**
-   * Return the same value.
-   */
-  var identity = function (_) { return _; };
-
+  var no = () => false;
+  var identity = a => a;
   /**
    * Generate a string containing static keys from compiler modules.
    */
@@ -288,11 +116,7 @@
       return keys.concat(m.staticKeys || [])
     }, []).join(',')
   }
-
-  /**
-   * Check if two values are loosely equal - that is,
-   * if they are plain objects, do they have the same shape?
-   */
+  // 检查两个值是否松散相等:如果他们是纯对象，他们是否有相同的"结构"
   function looseEqual (a, b) {
     if (a === b) { return true }
     var isObjectA = isObject(a);
@@ -314,11 +138,9 @@
             return looseEqual(a[key], b[key])
           })
         } else {
-          /* istanbul ignore next */
           return false
         }
       } catch (e) {
-        /* istanbul ignore next */
         return false
       }
     } else if (!isObjectA && !isObjectB) {
@@ -327,22 +149,14 @@
       return false
     }
   }
-
-  /**
-   * Return the first index at which a loosely equal value can be
-   * found in the array (if value is a plain object, the array must
-   * contain an object of the same shape), or -1 if it is not present.
-   */
+  // 寻找数组中和目标val松散相等的元素的索引
   function looseIndexOf (arr, val) {
-    for (var i = 0; i < arr.length; i++) {
-      if (looseEqual(arr[i], val)) { return i }
-    }
-    return -1
+    arr.forEach((item, index) => {
+      if (looseEqual(item, val)) return index
+    })
+    return -1 // 没找到则返回-1
   }
-
-  /**
-   * Ensure a function is called only once.
-   */
+  // 通过闭包实现了一个持久性的标识，fn执行了一次，它从此变为真，fn就不能被二次调用了
   function once (fn) {
     var called = false;
     return function () {
@@ -352,148 +166,37 @@
       }
     }
   }
-
   var SSR_ATTR = 'data-server-rendered';
-
-  var ASSET_TYPES = [
-    'component',
-    'directive',
-    'filter'
-  ];
-
-  var LIFECYCLE_HOOKS = [
-    'beforeCreate',
-    'created',
-    'beforeMount',
-    'mounted',
-    'beforeUpdate',
-    'updated',
-    'beforeDestroy',
-    'destroyed',
-    'activated',
-    'deactivated',
-    'errorCaptured',
-    'serverPrefetch'
-  ];
-
-  /*  */
-
-
+  var ASSET_TYPES = ['component', 'directive', 'filter']
+  var LIFECYCLE_HOOKS = ['beforeCreate', 'created', 'beforeMount', 'mounted', 'beforeUpdate', 'updated', 'beforeDestroy', 'destroyed', 'activated', 'deactivated', 'errorCaptured', 'serverPrefetch'];
 
   var config = ({
-    /**
-     * Option merge strategies (used in core/util/options)
-     */
-    // $flow-disable-line
-    optionMergeStrategies: Object.create(null),
-
-    /**
-     * Whether to suppress warnings.
-     */
-    silent: false,
-
-    /**
-     * Show production mode tip message on boot?
-     */
+    optionMergeStrategies: Object.create(null), // 自定义合并策略对象
+    silent: false, // 是否关闭Vue内部的警告
     productionTip: "development" !== 'production',
-
-    /**
-     * Whether to enable devtools
-     */
-    devtools: "development" !== 'production',
-
-    /**
-     * Whether to record perf
-     */
-    performance: false,
-
-    /**
-     * Error handler for watcher errors
-     */
+    devtools: "development" !== 'production',//是否启用vue-devtools开发者工具
+    performance: false,//是否开启性能追踪
     errorHandler: null,
-
-    /**
-     * Warn handler for watcher warns
-     */
     warnHandler: null,
-
-    /**
-     * Ignore certain custom elements
-     */
     ignoredElements: [],
-
-    /**
-     * Custom user key aliases for v-on
-     */
-    // $flow-disable-line
     keyCodes: Object.create(null),
-
-    /**
-     * Check if a tag is reserved so that it cannot be registered as a
-     * component. This is platform-dependent and may be overwritten.
-     */
-    isReservedTag: no,
-
-    /**
-     * Check if an attribute is reserved so that it cannot be used as a component
-     * prop. This is platform-dependent and may be overwritten.
-     */
+    isReservedTag: no, //保留标签，如果配置了，则这些标签不能注册为组件
     isReservedAttr: no,
-
-    /**
-     * Check if a tag is an unknown element.
-     * Platform-dependent.
-     */
     isUnknownElement: no,
-
-    /**
-     * Get the namespace of an element
-     */
     getTagNamespace: noop,
-
-    /**
-     * Parse the real tag name for the specific platform.
-     */
     parsePlatformTagName: identity,
-
-    /**
-     * Check if an attribute must be bound using property, e.g. value
-     * Platform-dependent.
-     */
     mustUseProp: no,
-
-    /**
-     * Perform updates asynchronously. Intended to be used by Vue Test Utils
-     * This will significantly reduce performance if set to false.
-     */
     async: true,
-
-    /**
-     * Exposed for legacy reasons
-     */
     _lifecycleHooks: LIFECYCLE_HOOKS
   });
 
-  /*  */
-
-  /**
-   * unicode letters used for parsing html tags, component names and property paths.
-   * using https://www.w3.org/TR/html53/semantics-scripting.html#potentialcustomelementname
-   * skipping \u10000-\uEFFFF due to it freezing up PhantomJS
-   */
   var unicodeRegExp = /a-zA-Z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C-\u200D\u203F-\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD/;
-
-  /**
-   * Check if a string starts with $ or _
-   */
+  // 判断传入的str字符串是否以$或_开头，即是否是保留关键字
   function isReserved (str) {
     var c = (str + '').charCodeAt(0);
     return c === 0x24 || c === 0x5F
   }
-
-  /**
-   * Define a property.
-   */
+  // Object.defineProperty定义属性，一般用来定义不可枚举属性
   function def (obj, key, val, enumerable) {
     Object.defineProperty(obj, key, {
       value: val,
@@ -502,31 +205,23 @@
       configurable: true
     });
   }
-
-  /**
-   * Parse simple path.
-   */
   var bailRE = new RegExp(("[^" + (unicodeRegExp.source) + ".$_\\d]"));
+  // parsePath执行的返回值赋给了this.getter，只有this.getter执行时，parsePath返回的新函数才会执行
   function parsePath (path) {
-    if (bailRE.test(path)) {
-      return
-    }
+    // 如果正则匹配成功，说明path字符串解析失败，它在JS中不是合法的访问对象属性的语法，直接返回
+    if (bailRE.test(path)) return
+    // 按.分给path字符串，生成的数组赋给segments
     var segments = path.split('.');
-    return function (obj) {
-      for (var i = 0; i < segments.length; i++) {
-        if (!obj) { return }
-        obj = obj[segments[i]];
-      }
+    return obj => { // 返回一个新函数，函数执行会遍历segments数组，逐个读取属性值，直到读取path指定的属性值
+      segments.forEach(item => {
+        if (!obj) return
+        obj = obj[item]
+      })
       return obj
     }
   }
-
-  /*  */
-
-  // can we use __proto__?
-  var hasProto = '__proto__' in {};
-
-  // Browser environment sniffing
+  var hasProto = '__proto__' in {}; // 是否能用__proto__
+  // 浏览器环境嗅探
   var inBrowser = typeof window !== 'undefined';
   var inWeex = typeof WXEnvironment !== 'undefined' && !!WXEnvironment.platform;
   var weexPlatform = inWeex && WXEnvironment.platform.toLowerCase();
@@ -534,14 +229,8 @@
   var isIE = UA && /msie|trident/.test(UA);
   var isIE9 = UA && UA.indexOf('msie 9.0') > 0;
   var isEdge = UA && UA.indexOf('edge/') > 0;
-  var isAndroid = (UA && UA.indexOf('android') > 0) || (weexPlatform === 'android');
   var isIOS = (UA && /iphone|ipad|ipod|ios/.test(UA)) || (weexPlatform === 'ios');
-  var isChrome = UA && /chrome\/\d+/.test(UA) && !isEdge;
-  var isPhantomJS = UA && /phantomjs/.test(UA);
   var isFF = UA && UA.match(/firefox\/(\d+)/);
-
-  // Firefox has a "watch" function on Object.prototype...
-  var nativeWatch = ({}).watch;
 
   var supportsPassive = false;
   if (inBrowser) {
@@ -549,92 +238,46 @@
       var opts = {};
       Object.defineProperty(opts, 'passive', ({
         get: function get () {
-          /* istanbul ignore next */
           supportsPassive = true;
         }
       })); // https://github.com/facebook/flow/issues/285
       window.addEventListener('test-passive', null, opts);
+      // EventTarget.addEventListener方法将指定的监听器注册到EventTarget上，当该对象触发指定的事件时，指定的回调函数就会执行，事件目标客源是文档上的元素/Document/Window或任何其他支持事件的对象(比如XMLHttpRequest)
+      // 'test-passive'是监听事件类型的字符串，第二个参数是一个实现了EventListener接口的对象，或者是一个函数。第三个参数是配置对象，可选的选项有capture：表示回调会在事件捕获阶段传播到该EventTarget时触发，oncee，表示添加事件回调后，最多只调用一次，之后被自动移除。passive。true的话，表示回调永远不会调用preventDefault()
     } catch (e) {}
   }
 
-  // this needs to be lazy-evaled because vue may be required before
-  // vue-server-renderer can set VUE_ENV
   var _isServer;
   var isServerRendering = function () {
-    if (_isServer === undefined) {
-      /* istanbul ignore if */
-      if (!inBrowser && !inWeex && typeof global !== 'undefined') {
-        // detect presence of vue-server-renderer and avoid
-        // Webpack shimming the process
-        _isServer = global['process'] && global['process'].env.VUE_ENV === 'server';
+    if (_isServer === undefined) { // 如果_isServer有值就不用重新计算，提高性能
+      if (!inBrowser && !inWeex && typeof global !== 'undefined') { // 如果不在浏览器中也不在weex中，同时global有定义，则可能是服务端渲染
+        _isServer = global['process'] && global['process'].env.VUE_ENV === 'server'; 
       } else {
         _isServer = false;
       }
     }
-    return _isServer
+    return _isServer // 全局变量保存最终的值
   };
 
-  // detect devtools
   var devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
-
-  /* istanbul ignore next */
-  function isNative (Ctor) {
-    return typeof Ctor === 'function' && /native code/.test(Ctor.toString())
-  }
-
-  var hasSymbol =
-    typeof Symbol !== 'undefined' && isNative(Symbol) &&
-    typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
-
-  var _Set;
-  /* istanbul ignore if */ // $flow-disable-line
-  if (typeof Set !== 'undefined' && isNative(Set)) {
-    // use native Set when available.
-    _Set = Set;
-  } else {
-    // a non-standard Set polyfill that only works with primitive keys.
-    _Set = /*@__PURE__*/(function () {
-      function Set () {
-        this.set = Object.create(null);
-      }
-      Set.prototype.has = function has (key) {
-        return this.set[key] === true
-      };
-      Set.prototype.add = function add (key) {
-        this.set[key] = true;
-      };
-      Set.prototype.clear = function clear () {
-        this.set = Object.create(null);
-      };
-
-      return Set;
-    }());
-  }
-
-  /*  */
-
+  const isNative = F => typeof F === 'function' && /native code/.test(F.toString())
+  var hasSymbol = typeof Symbol !== 'undefined' && isNative(Symbol) && typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
   var warn = noop;
   var tip = noop;
   var generateComponentTrace = (noop); // work around flow check
   var formatComponentName = (noop);
-
   {
     var hasConsole = typeof console !== 'undefined';
     var classifyRE = /(?:^|[-_])(\w)/g;
-    var classify = function (str) { return str
-      .replace(classifyRE, function (c) { return c.toUpperCase(); })
-      .replace(/[-_]/g, ''); };
-
+    const classify = str => str.replace(classifyRE, c => c.toUpperCase()).replace(/[-_]/g, '')
     warn = function (msg, vm) {
       var trace = vm ? generateComponentTrace(vm) : '';
-
       if (config.warnHandler) {
         config.warnHandler.call(null, msg, vm, trace);
       } else if (hasConsole && (!config.silent)) {
         console.error(("[Vue warn]: " + msg + trace));
       }
     };
-
     tip = function (msg, vm) {
       if (hasConsole && (!config.silent)) {
         console.warn("[Vue tip]: " + msg + (
@@ -642,7 +285,6 @@
         ));
       }
     };
-
     formatComponentName = function (vm, includeFile) {
       if (vm.$root === vm) {
         return '<Root>'
@@ -658,13 +300,11 @@
         var match = file.match(/([^/\\]+)\.vue$/);
         name = match && match[1];
       }
-
       return (
         (name ? ("<" + (classify(name)) + ">") : "<Anonymous>") +
         (file && includeFile !== false ? (" at " + file) : '')
       )
     };
-
     var repeat = function (str, n) {
       var res = '';
       while (n) {
@@ -674,7 +314,6 @@
       }
       return res
     };
-
     generateComponentTrace = function (vm) {
       if (vm._isVue && vm.$parent) {
         var tree = [];
@@ -704,136 +343,97 @@
       }
     };
   }
-
-  /*  */
-
   var uid = 0;
-
-  /**
-   * A dep is an observable that can have multiple
-   * directives subscribing to it.
-   */
-  var Dep = function Dep () {
-    this.id = uid++;
-    this.subs = [];
-  };
-
-  Dep.prototype.addSub = function addSub (sub) {
-    this.subs.push(sub);
-  };
-
-  Dep.prototype.removeSub = function removeSub (sub) {
-    remove(this.subs, sub);
-  };
-
-  Dep.prototype.depend = function depend () {
-    if (Dep.target) {
-      Dep.target.addDep(this);
+  // Dep实例用来管理watcher实例的
+  class Dep {
+    constructor() {
+      this.id = uid++ // 每个dep实例都有唯一的id
+      this.subs = [] // 专门存放watcher实例的数组
     }
-  };
-
-  Dep.prototype.notify = function notify () {
-    // stabilize the subscriber list first
-    var subs = this.subs.slice();
-    if (!config.async) {
-      // subs aren't sorted in scheduler if not running async
-      // we need to sort them now to make sure they fire in correct
-      // order
-      subs.sort(function (a, b) { return a.id - b.id; });
+    addSub(sub) { // 将watcher推入到subs数组中
+      this.subs.push(sub)
     }
-    for (var i = 0, l = subs.length; i < l; i++) {
-      subs[i].update();
+    removeSub(sub) { // 从subs数组中移除传入的watcher
+      remove(this.subs, sub)
     }
-  };
-
-  // The current target watcher being evaluated.
-  // This is globally unique because only one watcher
-  // can be evaluated at a time.
-  Dep.target = null;
-  var targetStack = [];
-
-  function pushTarget (target) {
-    targetStack.push(target);
-    Dep.target = target;
+    depend() { // 收集依赖
+      if (Dep.target) { // 定义响应式属性的get方法时，已经判断过Dep.target是否存在，然后才调用depend收集依赖。在depend中又判断一次，是因为depend除了在属性的get方法中用到，在计算属性的watcher中也用到。
+        Dep.target.addDep(this) // 并没有直接往subs数组添加依赖，而是调用watcher的addDep方法，传入当前dep实例，在addDep方法中调用dep的addSub方法收集依赖。因为要对传入的dep做一些判断，避免重复的收集依赖。
+      }
+    }
+    //模版中使用数据属性name，模版被编译成渲染函数，执行$mount进行挂载时，会调用mountComponent，会创建渲染函数的watcher，对渲染函数求值，求值的过程会读取name属性，触发name的get，这个watcher被收集到name的dep中，当后面修改name的属性值时，name的set被触发，set中调用dep.notify方法。
+    notify() { // 通知watcher重新求值
+      const subs = this.subs.slice() //先拷贝一份subs数组
+      if (!config.async) {
+        subs.sort((a, b) => a.id - b.id)
+      }
+      subs.forEach(sub => { // 遍历当前dep的subs数组中所有的watcher，逐个调用它的update方法
+        sub.update() //触发依赖其实就是对被观察的目标的重新求值，重新求值发生在update()
+      })
+    }
   }
-
-  function popTarget () {
-    targetStack.pop();
+  // Dep.target是当前正在求值的watcher，是全局唯一的，当某个watcher调用它的get方法对被观察目标求值时，会将自己赋给Dep.target，并把自己压入targetStack栈，等到这个watcher求值完毕，targetStack栈会弹出栈顶，新的栈顶继续作为Dep.target
+  Dep.target = null;
+  var targetStack = []; // 用来存放watcher的栈
+  function pushTarget (target) {
+    targetStack.push(target); // 将从传入的target推入targetStack
+    Dep.target = target; // 并赋给Dep.target
+  }
+  function popTarget () { // 作用是恢复之前的Dep.target
+    targetStack.pop(); // targetStack弹出栈顶，Dep.target继续指向栈顶
     Dep.target = targetStack[targetStack.length - 1];
   }
-
-  /*  */
-
-  var VNode = function VNode (
-    tag,
-    data,
-    children,
-    text,
-    elm,
-    context,
-    componentOptions,
-    asyncFactory
-  ) {
-    this.tag = tag;
-    this.data = data;
-    this.children = children;
-    this.text = text;
-    this.elm = elm;
-    this.ns = undefined;
-    this.context = context;
-    this.fnContext = undefined;
-    this.fnOptions = undefined;
-    this.fnScopeId = undefined;
-    this.key = data && data.key;
-    this.componentOptions = componentOptions;
-    this.componentInstance = undefined;
-    this.parent = undefined;
-    this.raw = false;
-    this.isStatic = false;
-    this.isRootInsert = true;
-    this.isComment = false;
-    this.isCloned = false;
-    this.isOnce = false;
-    this.asyncFactory = asyncFactory;
-    this.asyncMeta = undefined;
-    this.isAsyncPlaceholder = false;
-  };
-
-  var prototypeAccessors = { child: { configurable: true } };
-
-  // DEPRECATED: alias for componentInstance for backwards compat.
-  /* istanbul ignore next */
-  prototypeAccessors.child.get = function () {
-    return this.componentInstance
-  };
-
-  Object.defineProperties( VNode.prototype, prototypeAccessors );
-
-  var createEmptyVNode = function (text) {
-    if ( text === void 0 ) text = '';
-
-    var node = new VNode();
-    node.text = text;
-    node.isComment = true;
+  // vnode是在数据变化前后生成的真实DOM对应的虚拟DOM节点，比对新旧vnode的差异，更新有差异的DOM节点，尽量少的操作真实DOM更新视图。vnode是解决频繁操作DOM而引发性能问题的产物，它将页面的状态抽象为JS对象，本质上是JS和真实DOM之间的中间层，当我们想用JS进行大批量DOM操作时，会优先对vnode这个JS对象进行操作，最后通过比对要改动的部分，通知并更新真实DOM，虽然最后还是操作了真实DOM，但将多次改动合并为一次操作，减少了DOM的重排，缩短了生成渲染树和绘制的时间。
+  // 浏览器将真实DOM设计的很复杂，不仅包括自身属性的描述，大小位置等定义，还包括DOM所有的浏览器事件等，结构复杂我们频繁操作DOM会带来浏览器性能问题，vnode只是用来映射到真实DOM的渲染，不需要包含操作DOM的方法，而是一个包含所有渲染所需的信息，包括标签名、数据、子节点等信息。组件初始化后得到的vnode是一个抽象的信息化的对应于DOM树的JS对象，比真实DOM对象描述的内容简单很多，vnode还有其他属性来扩展它的灵活性
+  class VNode {
+    constructor(tag, data, children, text, elm, context, componentOptions, asyncFactory) {
+      this.tag = tag; // 当前节点的标签名
+      this.data = data; //节点对应的数据信息，如props,attrs,key,class,directives等
+      this.children = children; //节点的子vnode节点(数组)
+      this.text = text; // 当前节点对应的文本
+      this.elm = elm; // 节点对应的真实DOM节点
+      this.ns = undefined; // 当前节点的名字空间
+      this.context = context; // 当前节点的编译作用域
+      this.fnContext = undefined; // 函数化组件作用域
+      this.fnOptions = undefined; // 
+      this.fnScopeId = undefined; // 
+      this.key = data && data.key; // 节点的唯一标志，diff时候有用
+      this.componentOptions = componentOptions; // 当前vnode节点对应的组件配置对象
+      this.componentInstance = undefined; // 当前vnode对应的组件实例
+      this.parent = undefined; // 当前节点的父节点，即组件占位符节点
+      this.raw = false; //是否为原生HTML或只是普通文本，innerHTML的时候为true，textContent的时候为false
+      this.isStatic = false; // 是否为静态节点
+      this.isRootInsert = true; // 是否作为根节点插入
+      this.isComment = false; // 是否为注释节点
+      this.isCloned = false; // 是否为克隆节点
+      this.isOnce = false; // 是否有v-once指令，即一次性节点
+      this.asyncFactory = asyncFactory; // 
+      this.asyncMeta = undefined; // 
+      this.isAsyncPlaceholder = false; // 
+    }
+    get child() { // 已弃用
+      return this.componentInstance
+    }
+  }
+  // 创建一个空的注释vnode节点
+  const createEmptyVNode = (text = '') => { 
+    const node = new VNode()
+    node.text = text
+    node.isComment = true 
     return node
-  };
-
+  }
+  // 创建一个文本vnode节点
   function createTextVNode (val) {
     return new VNode(undefined, undefined, undefined, String(val))
   }
 
-  // optimized shallow clone
-  // used for static nodes and slot nodes because they may be reused across
-  // multiple renders, cloning them avoids errors when DOM manipulations rely
-  // on their elm reference.
+  //克隆节点是将现有节点的属性复制到新节点中，作用是优化静态节点和插槽节点
+  // 以静态节点为例，它的内容不会改变，所以除了首次渲染需要执行渲染函数获取vnode外，后续更新不需要执行渲染函数重新生成静态vnode节点，因此使用克隆节点方法将vnode克隆一份，使用克隆节点进行渲染，就不用重新执行渲染函数生成新的静态节点的vnode
   function cloneVNode (vnode) {
     var cloned = new VNode(
       vnode.tag,
       vnode.data,
-      // #7975
-      // clone children array to avoid mutating original in case of cloning
-      // a child.
-      vnode.children && vnode.children.slice(),
+      vnode.children && vnode.children.slice(),//克隆子数组，避免对原始数组进行变异
       vnode.text,
       vnode.elm,
       vnode.context,
@@ -852,110 +452,63 @@
     return cloned
   }
 
-  /*
-   * not type checking this file because flow doesn't play well with
-   * dynamically accessing methods on Array prototype
-   */
-
   var arrayProto = Array.prototype;
-  var arrayMethods = Object.create(arrayProto);
-
-  var methodsToPatch = [
-    'push',
-    'pop',
-    'shift',
-    'unshift',
-    'splice',
-    'sort',
-    'reverse'
-  ];
-
-  /**
-   * Intercept mutating methods and emit events
-   */
+  var arrayMethods = Object.create(arrayProto); // 创建一个空对象，原型指向Array的原型
+  const mutationMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse']
+  // 我们希望一个响应式的数组，在调用数组变异方法改动数组时，能触发数组的dep所收集的依赖。于是我们遍历这7个数组变异方法的函数名，重新定义方法
   methodsToPatch.forEach(function (method) {
-    // cache original method
-    var original = arrayProto[method];
-    def(arrayMethods, method, function mutator () {
-      var args = [], len = arguments.length;
-      while ( len-- ) args[ len ] = arguments[ len ];
-
-      var result = original.apply(this, args);
-      var ob = this.__ob__;
-      var inserted;
+    var original = arrayProto[method]; // 缓存原本的方法
+    def(arrayMethods, method, function mutator (...args) { // 在arrayMethods空对象上定义同名的新方法，原有功能保留，加入触发依赖的功能
+      var result = original.apply(this, args); // 原方法执行，还原原有功能
+      var ob = this.__ob__; // 数组变异方法想要触发数组的依赖，必须引用到存放依赖的dep，被观测的数组有__ob__属性，值为observer实例，有dep属性，数组调用变异方法时，方法中this指向数组本身，所以this.__ob__.dep存放着该数组的依赖
+      var inserted; // 对应被观测的数组，我们会递归地观测数组的每一个元素，有的数组变异方法会往数组里添加元素，那么新加入的元素也要被观测
       switch (method) {
         case 'push':
-        case 'unshift':
-          inserted = args;
-          break
-        case 'splice':
-          inserted = args.slice(2);
-          break
-      }
+        case 'unshift': inserted = args; break
+        case 'splice': inserted = args.slice(2); break
+      } // inserted是新增元素组成的数组，observeArray调用就是观测数组中的每一项。observeArray是Observer的原型方法
       if (inserted) { ob.observeArray(inserted); }
-      // notify change
-      ob.dep.notify();
-      return result
+      ob.dep.notify(); // this.__ob__.dep，即被观测数组的dep实例调用notify，触发它里面的依赖
+      return result // 正常返回数组原本方法执行的返回值
     });
   });
 
-  /*  */
-
   var arrayKeys = Object.getOwnPropertyNames(arrayMethods);
 
-  /**
-   * In some cases we may want to disable observation inside a component's
-   * update computation.
-   */
-  var shouldObserve = true;
-
-  function toggleObserving (value) {
-    shouldObserve = value;
-  }
-
-  /**
-   * Observer class that is attached to each observed
-   * object. Once attached, the observer converts the target
-   * object's property keys into getter/setters that
-   * collect dependencies and dispatch updates.
-   */
-  var Observer = function Observer (value) {
-    this.value = value;
-    this.dep = new Dep();
-    this.vmCount = 0;
-    def(value, '__ob__', this);
-    if (Array.isArray(value)) {
-      if (hasProto) {
-        protoAugment(value, arrayMethods);
-      } else {
-        copyAugment(value, arrayMethods, arrayKeys);
+  var shouldObserve = true; // 是否进行观测的开关
+  let toggleObserving = (value) => { shouldObserve = value }
+  // Observer的实例化可以对value进行观测，value的
+  class Observer {
+    constructor(value) { // 接收的value已经是数组/对象
+      this.value = value; // Observer实例的value属性记录被观测的value
+      this.dep = new Dep(); // Observer实例维护一个Dep实例，它保存所有依赖于value的watcher实例
+      this.vmCount = 0; // 实例计数器，初始化为0
+      def(value, '__ob__', this) // 给被观测的value添加一个不可枚举属性__ob__，值为当前的Observer实例。于是value.__ob__就引用到观测它的Observer实例，value.__ob__.dep就引用到属于value的Dep实例
+      if (Array.isArray(value)) { // 如果观测的value是数组
+        if ('__proto__' in {}) { // 如果当前环境 __proto__ 属性可用
+          value.__proto__ = arrayMethods // 通过修改value的__proto__属性值，value的原型对象指向了arrayMethods，不再指向Array.prototype，因此value调用7个变异方法时，会实际调用改动的数组方法，而不是原本的数组原型方法
+        } else { // 如果__proto__不可用，将改造后的数组变异方法直接挂载到被观测的数组value上
+          mutationMethods.forEach(methodName => {//成为value的自身方法后，就比原型上的方法优先
+            def(value, methodName, arrayMethods[methodName])
+          })
+        }
+        this.observeArray(value) //这是递归观测数组每一个元素，因为如果数组value嵌套了数组/对象，元素项调用数组变异方法或修改属性值->数组元素改变->value本身改变，但因为不是value调用的数组变异方法而无法触发value的依赖。因此，将每一个数组元素响应式化，让它们具备触发数组本身的依赖的能力
+      } else { // 如果被观测的value是对象，调用walk将每一个属性转成响应式属性
+        this.walk(value)
       }
-      this.observeArray(value);
-    } else {
-      this.walk(value);
     }
-  };
-
-  /**
-   * Walk through all properties and convert them into
-   * getter/setters. This method should only be called when
-   * value type is Object.
-   */
-  Observer.prototype.walk = function walk (obj) {
-    var keys = Object.keys(obj);
-    for (var i = 0; i < keys.length; i++) {
-      defineReactive$$1(obj, keys[i]);
+    walk(obj) { 
+      var keys = Object.keys(obj)
+      keys.forEach(key => {// 遍历value对象的自身属性，调用defineReactive
+        defineReactive$$1(obj, key) // 将对象的每一个属性转为响应式属性，当该属性值发生变化时，可以告知所有依赖该属性的watcher
+        // 没传val，说明有意暂时先不获取属性值，而在函数内部获取val
+        // 没传shallow，说明默认是深度观测
+      })
     }
-  };
-
-  /**
-   * Observe a list of Array items.
-   */
-  Observer.prototype.observeArray = function observeArray (items) {
-    for (var i = 0, l = items.length; i < l; i++) {
-      observe(items[i]);
+    observeArray(arr) { // 观测数组的每一项，不确定是对象/数组/其他，所以调用observe
+      arr.forEach(item => { observe(item) })
     }
-  };
+  }
 
   // helpers
 
